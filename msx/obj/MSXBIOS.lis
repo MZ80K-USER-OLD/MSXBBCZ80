@@ -1,0 +1,233 @@
+MSXBIOS.asm:
+     1                          ; ------------------------------------------------------------------------------
+     2                          ; BBX80 MSX HOST v1.0
+     3                          ; Copyright (C) 2024 H.J. Berends
+     4                          ;
+     5                          ; ver2.0 for MSX2 mcheine
+     6                          ; Copyright (C) 2027 MZ80K-USER-OLD
+     7                          ;
+     8                          ; You can freely use, distribute or modify this program.
+     9                          ; It is provided freely and "as it is" in the hope that it will be useful,
+    10                          ; but without any warranty of any kind, either expressed or implied.
+    11                          ; ------------------------------------------------------------------------------
+    12                          
+    13                          		SECTION MSXHOST
+    14                          
+    15                          		PUBLIC	msxBIOS
+    16                          		PUBLIC	msxKey
+    17                          		PUBLIC	msxSetCliksw
+    18                          		PUBLIC	msxInitText
+    19                          		PUBLIC	msxBeep
+    20                          		PUBLIC	msxINITXT80
+    21                          		PUBLIC	msxCLS
+    22                          		PUBLIC	msxSTRPUT
+    23                          		PUBLIC  msxCHPUT
+    24                          		PUBLIC	msxINLINE
+    25                          		PUBLIC  msxPOSIT
+    26                          		PUBLIC	msxGETPOS
+    27                          		PUBLIC	msxCheckMSX2
+    28                          
+    29                          IFNDEF BDOS
+    30                          BDOS		EQU	$0005			; MSX-DOS API CALL
+    31                          ENDIF
+    32                          ; ------------------------------------------------------------------------------
+    33                          ;  MSX BIOS entries
+    34                          ;
+    35                          DEFINE MSXBIOS
+    36                          CALSLT		EQU	$001C
+    37                          IDBYT0		EQU	$002B
+    38                          INITXT		EQU	$006C			; select screen mode 0
+    39                          INIT32		EQU	$006F			; select screen mode 1
+    40                          CHSNS   	EQU $009C
+    41                          CHGET   	EQU $009F    		; 1文字入力
+    42                          CHPUT   	EQU $00A2    		; 1文字出力
+    43                          BEEP		EQU	$00C0
+    44                          POSIT		EQU $00C6    		; カーソル位置指定
+    45                          CLS		    EQU $00C3    		; 画面消去
+    46                          PINLINE		EQU $00AE           ; 一行入力
+    47                          
+    48                          BUFMIN		EQU $F55D           ; 入力バッファ-1
+    49                          BUF		    EQU $F55E           ; BASIC 入力バッファ、終端が0
+    50                          CLIKSW		EQU	$F3DB
+    51                          EXPTBL		EQU	$FCC1			; スロットテーブル
+    52                          
+    53                          LINL40		EQU	0F3AEH			; screen width mode 0
+    54                          LINL32		EQU	0F3AFH			; screen width mode 1
+    55                          LINLEN		EQU	0F3B0H			; screen width
+    56                          CSRY		EQU 0F3DCH			; cursor row position
+    57                          CSRX		EQU	0F3DDH			; cursor column position
+    58                          EXBRSA		EQU	0FAF8H			; slotid subrom
+    59                          
+    60                          ; ------------------------------------------------------------------------------
+    61                          ; Use MSX BIOS keyboard input which is faster than via CP/M dosKey routine.
+    62                          ; ------------------------------------------------------------------------------
+    63  0000  dde5              msxKey:		PUSH	IX
+    64  0002  dd219c00          		LD	IX,CHSNS	; Test the status of the keyboard buffer
+    65  0006  cdbc00            		CALL	msxBIOS
+    66  0009  2807              		JR	Z,_endKey	; Z = no key is pressed
+    67  000b  dd219f00          		LD	IX,CHGET	;
+    68  000f  cdbc00            		CALL	msxBIOS
+    69  0012  dde1              _endKey:	POP	IX
+    70  0014  c9                		RET
+    71                          
+    72                          ; ------------------------------------------------------------------------------
+    73                          ; Set keyboard click switch
+    74                          ; ------------------------------------------------------------------------------
+    75  0015  e601              msxSetCliksw:	AND	$01		; 0=Off 1=On
+    76  0017  32dbf3            		LD	(CLIKSW),A
+    77  001a  c9                		RET
+    78                          
+    79                          ; ------------------------------------------------------------------------------
+    80                          ; Initialize text mode (screen 0), uses current screen width setting (LINL40)
+    81                          ; ------------------------------------------------------------------------------
+    82                          msxInitText:
+    83  001b  dde5              		PUSH	IX
+    84  001d  dd216c00          		LD	IX,INITXT
+    85  0021  cdbc00            		CALL	msxBIOS
+    86  0024  dde1              		POP	IX
+    87  0026  c9                		RET
+    88                          ; ------------------------------------------------------------------------------
+    89                          ; CURSOR POSITION
+    90                          ; L  = Y
+    91                          ; H  = X
+    92                          ; ------------------------------------------------------------------------------
+    93                          msxPOSIT:
+    94  0027  dde5              		PUSH IX
+    95  0029  dd21c600          		LD IX,POSIT       ; HLレジスタの値を画面に反映
+    96  002d  cdbc00            		CALL msxBIOS
+    97  0030  dde1              		POP IX
+    98  0032  c9                		RET
+    99                          
+   100                          ; ------------------------------------------------------------------------------
+   101                          ; GET CURSOR POSITION
+   102                          ; L  = Y
+   103                          ; H  = X
+   104                          ; ------------------------------------------------------------------------------
+   105                          msxGETPOS:
+   106                             	 ; 現在のシステム変数からカーソル位置を取得
+   107  0033  3addf3                	LD  A,(CSRX)
+   108  0036  67                    	LD  H,A
+   109  0037  3adcf3                	LD  A,(CSRY)
+   110  003a  6f                    	LD  L,A
+   111  003b  c9                		RET
+   112                          
+   113                          ; ------------------------------------------------------------------------------
+   114                          ; Output Bell / MSX Beep
+   115                          ; CHPUT BELL only works when the VDP is in text mode, use BIOS call instead
+   116                          ; ------------------------------------------------------------------------------
+   117                          msxBeep:
+   118  003c  dde5              		PUSH	IX
+   119  003e  dd21c000          		LD	IX,BEEP
+   120  0042  cdbc00            		CALL	msxBIOS
+   121  0045  dde1              		POP	IX
+   122  0047  c9                		RET
+   123                          ;
+   124                          ; Output String terminated 0
+   125                          ; HL
+   126                          ;
+   127                          msxSTRPUT:
+   128  0048  7e                		LD  A,(HL)
+   129  0049  b7                		OR  A
+   130  004a  c8                		RET Z
+   131  004b  23                		INC HL
+   132  004c  e5                		PUSH HL
+   133  004d  dd21a200          		LD	IX,CHPUT
+   134  0051  cdbc00            		CALL msxBIOS
+   135  0054  e1                		POP HL
+   136  0055  18f1              		JR msxSTRPUT
+   137                          ;
+   138                          ; Output Character
+   139                          ; A=Character
+   140                          ;
+   141                          msxCHPUT:
+   142  0057  dd21a200          		LD	IX,CHPUT
+   143  005b  cdbc00            		CALL msxBIOS
+   144  005e  e1                		POP HL
+   145  005f  18e7              		JR msxSTRPUT
+   146                          
+   147                          ;
+   148                          ; Input line
+   149                          ;  CY:CTRL-STOP
+   150                          ;
+   151                          msxINLINE:
+   152  0061  dde5              		PUSH IX
+   153  0063  215ef5            		LD  HL,BUF
+   154  0066  2b                		DEC HL
+   155  0067  dd21ae00          		LD	IX,PINLINE   ; 一行入力
+   156  006b  cdbc00            		CALL msxBIOS
+   157  006e  215ef5            		LD HL,BUF
+   158  0071  dde1              		POP IX
+   159  0073  c9                		RET            ; CTRL-STOPが押されたらCY=1
+   160                          ;
+   161                          ; Init Screen
+   162                          ;  Screen 0, width 80
+   163                          ;
+   164                          msxINITXT80:
+   165  0074  dde5              		PUSH  IX
+   166  0076  3e50              		LD  A,80
+   167  0078  32aef3            		LD	(LINL40),A		; set 40/80 column width
+   168  007b  dd216c00          		LD	IX,INITXT
+   169  007f  cdbc00            		CALL msxBIOS
+   170  0082  dde1              		POP IX
+   171  0084  c9                		RET
+   172                          ;
+   173                          ;	Screen Clear
+   174                          ;
+   175                          msxCLS:
+   176  0085  dde5              		PUSH IX
+   177  0087  dd21c300          		LD	IX,CLS
+   178  008b  cdbc00            		CALL msxBIOS
+   179  008e  dde1              		POP IX
+   180  0090  c9                		RET
+   181                          
+   182                          ;------------------------------------------------------------------------------
+   183                          ; Check Msx Version (MSX2 or over)
+   184                          ; On MSX1, print message and exit to OS
+   185                          ; ------------------------------------------------------------------------------
+   186                          msxCheckMSX2:
+   187  0091  3af8fa            		LD	A,(EXBRSA)	; MSX2 Version
+   188  0094  b7                		OR	A			; MSX1 ?
+   189  0095  ca9900            		JP	Z,ERRMSX1	; yep, invalid parameter
+   190  0098  c9                		RET				; CY=0
+   191                          
+   192                          ERRMSX1:
+   193  0099  11a600            		LD	DE, msg
+   194  009c  0e09              		LD	C, $09
+   195  009e  cd0500            		CALL BDOS		; OS SYSTEM CALL
+   196  00a1  0e00              		LD C,$00
+   197  00a3  cd0500            		CALL BDOS		; EXIT TO OS
+   198                          
+   199  00a6  596f75206e656564  msg:	db	"You need MSX2 or over$"
+              204d535832206f72  
+              206f76657224      
+   200                          
+   201                          
+   202                          ; ------------------------------------------------------------------------------
+   203                          ; MSX BIOS routines, interslot call wrapper
+   204                          ; Parameters:
+   205                          ;   IX = BIOS routine
+   206                          ; ------------------------------------------------------------------------------
+   207                          msxBIOS:
+   208  00bc  fde5              		PUSH 	IY
+   209  00be  fd2ac0fc          		LD	IY,(EXPTBL-1)	; BIOS slot in IYH
+   210                          
+   211                          		; Save shadow registers
+   212  00c2  d9                		EXX
+   213  00c3  c5                		PUSH	BC
+   214  00c4  d5                		PUSH	DE
+   215  00c5  e5                		PUSH	HL
+   216  00c6  d9                		EXX
+   217                          
+   218  00c7  cd1c00            		CALL	CALSLT		; interslot call
+   219                          
+   220                          		; Restore shadow registers
+   221  00ca  d9                		EXX
+   222  00cb  e1                		POP	HL
+   223  00cc  d1                		POP	DE
+   224  00cd  c1                		POP	BC
+   225  00ce  d9                		EXX
+   226                          
+   227  00cf  fde1              		POP	IY
+   228  00d1  c9                		RET
+   229                          
+   230                          

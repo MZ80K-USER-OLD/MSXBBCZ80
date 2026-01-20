@@ -111,12 +111,15 @@
 	EXTERN  OSLINE
 	EXTERN  PrintAddress
 	EXTERN  PUTCRLF
+	EXTERN	STRPUT
+
 ;
 	PUBLIC COLD
 ;
 CR	EQU	0DH
 LF	EQU	0AH
 ESC	EQU	1BH
+SPACE	EQU	20H
 ;
 TERROR	EQU	85H
 TLINE	EQU	86H
@@ -154,23 +157,7 @@ TOKLO	EQU	8FH
 TOKHI	EQU	93H
 OFFSET	EQU	0CFH-TOKLO
 
-
-; MSX BIOS entries
-
-CALSLT	EQU	001CH			; inter slot call
-INITXT	EQU	006CH			; select screen mode 0
-INIT32	EQU	006FH			; select screen mode 1
-
-
-; BIOS calls for character I/O
-
-CHGET   EQU 009FH    		; 1文字入力
-CHPUT   EQU 00A2H    		; 1文字出力
-POSIT   EQU 00C6H    		; カーソル位置指定
-CLS     EQU 00C2H    		; 画面消去
-PINLINE EQU 00AEH           ; 一行入力
-EXBRSA	EQU	0FAF8H			; slotid subrom
-EXPTBL	EQU	0FCC1H			; slot expansion flag, first entry is also slotid ROM BIOS
+ORG $200
 
 START:	JP	COLD
 	JP	WARM
@@ -266,7 +253,20 @@ NOAUTO:
 	CALL	OSLINE		;GET CONSOLE INPUT
 	XOR	A
 	LD	(COUNT),A
+; COOMAD CHECK 
 	LD	IY,ACCS
+	LD	A,(IY)
+	CP	'>'
+	JR  NZ,SKIPSP2
+SKIPSP:	
+	INC	IY
+	LD A,(IY)
+; SKIP　SPACE
+SKIPSP2:
+	CP  SPACE
+	JR  Z,SKIPSP
+;　IMMEDIATE MODE COMMANDS	
+IMCMND:
 	LD	HL,COMNDS
 	CALL	LEX0
 	POP	HL
@@ -2129,7 +2129,8 @@ RANGE2:	CP	'A'
 LEXAN1:	LD	(DE),A		;TRANSFER TO BUFFER
 	INC	DE		;INCREMENT POINTERS
 	INC	IY
-LEXAN2:	LD	A,E		;MAIN ENTRY
+LEXAN2:
+	LD	A,E		;MAIN ENTRY
 	CP	252		;TEST LENGTH
 	LD	A,19
 	JP	NC,ERROR	;'String too long'
@@ -2284,22 +2285,8 @@ TEXTLF:	CALL	OUTCHR
 ;
 
 ;文字列出力
-TELL:
-STRPUT:
-    ; 文字列出力
-    LD  A,(HL)
-    OR  A
-    RET Z
-    INC HL
-	PUSH HL
-	LD	IX,CHPUT      
-	CALL BIOSCALL	 ; 画面に表示 (自動的にXが+1される)    
-    POP HL
-    JR STRPUT
+TELL:	JP STRPUT
 
-BIOSCALL:
-	LD	IY,(EXPTBL-1)
-	JP	CALSLT	
 ;
 ; NLIST - Check for end of list
 ;

@@ -2399,7 +2399,7 @@ STORE4:	EXX
 ;
 MODIFS:	LD	A,L		;Operator
 	CP	'+'
-	LD	A,H		;Type
+	LD	A,H			;Type
 	JR	NZ,STACCS
 	PUSH	IX
 	EX	(SP),IY

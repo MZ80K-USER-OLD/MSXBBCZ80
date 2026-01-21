@@ -31,6 +31,7 @@
 	GLOBAL  CheckMSXDOS
 	GLOBAL  PrintAddress
 	GLOBAL  PUTCRLF
+	GLOBAL  STRPUT
 
 ; Primary OS routines
 	GLOBAL	CLS
@@ -1263,23 +1264,26 @@ INLINE:
 	CALL msxPINLINE   ; 一行入力 入力先 BUF
     POP DE
 	JR C,OSLINE_STOP   ; CTRL-STOPが押されたら終わり
-	INC HL 		
 INLINE0:
+	INC HL 		; HL=BUF-1 　だから
 	LD A,(HL)
 	LD (DE),A
 	INC DE
-	INC HL
 	OR A
-	RET Z
-	JR INLINE0
+	JR NZ,INLINE0
+	LD (DE),A	; NULL 終端 
+	DEC DE
+	LD A,CR
+	LD (DE),A	; 0DH,NULL
+	RET
 
 OSLINE_STOP:
 	LD A,CR
-	LD (DE),A
+	LD (DE),A	; 0DH
 	INC DE 
 	XOR A
-	LD (DE),A
-	DEC DE
+	LD (DE),A	; NULL 終端
+	SCF			; CTRL-STOPが押されたことを示す
 	RET
 ;
 ; INIT SCREEN
@@ -1361,11 +1365,16 @@ PUTCRLF:
 PROMPT:
 	LD A,'>'
 	JP msxCHPUT
+;
+; HLレジスタの指す文字列を画面に出力するルーチン
+; 文字列はNULL(0)で終端されているもの
+STRPUT:
+    JP msxSTRPUT ; 文字列出力
 
 ;
 ;
-EDITST:	DEFM	"EDIT"
-LISTST:	DEFM	"LIST"
+;EDITST:	DEFM	"EDIT"
+;LISTST:	DEFM	"LIST"
 ;
 BEL	EQU	7
 BS	EQU	8

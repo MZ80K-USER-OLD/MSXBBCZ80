@@ -1,0 +1,129 @@
+zcc - Frontend for the z88dk Cross-C Compiler - v23854-4d530b6eb7-20251002
+
+Usage: zcc +[target] {options} {files}
+   -v -verbose                  Output all commands that are run (-vn suppresses)
+   -h -help                     Display this text
+      -o                        Set the basename for linker output files
+      -specs                    Print out compiler specs
+
+CPU Targetting:
+      -m8080                    Generate output for the i8080
+      -m8085                    Generate output for the i8085
+      -mz80                     Generate output for the z80
+      -mz80_ixiy                Generate output for the z80 with ix/iy swap
+      -mz80_strict              Generate output for the documented z80
+      -mz80n                    Generate output for the z80n
+      -mz180                    Generate output for the z180
+      -mr2ka                    Generate output for the Rabbit 2000
+      -mr3k                     Generate output for the Rabbit 3000
+      -mr4k                     Generate output for the Rabbit 4000
+      -mr6k                     Generate output for the Rabbit 6000
+      -mgbz80                   Generate output for the gbz80
+      -mez80_z80                Generate output for the ez80 (z80 mode)
+      -mkc160                   Generate output for the KC160 (z80 mode)
+
+Target options:
+      -target                   Set the target (alternative to + syntax)
+      -subtype                  Set the target subtype
+      -clib                     Set the target clib type
+      -crt0                     Override the crt0 assembler file to use
+      -startuplib               Override STARTUPLIB - compiler base support routines
+      --no-crt                  Link without crt0 file (if possible, may not be successful)
+      -startup                  Set the startup type
+      -zorg                     Set the origin (only certain targets)
+      -nostdlib                 If set ignore INCPATH, STARTUPLIB
+      -pragma-redirect          Redirect a function
+      -pragma-define            Define the option in zcc_opt.def
+      -pragma-output            Define the option in zcc_opt.def (same as above)
+      -pragma-export            Define the option in zcc_opt.def and export as public
+      -pragma-need              NEED the option in zcc_opt.def
+      -pragma-bytes             Dump a sequence of bytes zcc_opt.def
+      -pragma-string            Dump a string zcc_opt.def
+      -pragma-include           Process include file containing pragmas
+
+Lifecycle options:
+      -m4                       Stop after processing m4 files
+   -E --preprocess-only         Stop after preprocessing files
+      -dD                       Print macro definitions in -E mode in addition to normal output
+   -c --compile-only            Stop after compiling .c .s .asm files to .o files
+   -a --assemble-only           Stop after compiling .c .s files to .asm files
+   -S --assemble-only           Stop after compiling .c .s files to .asm files
+   -x                           Make a library out of source files
+      -xc                       Explicitly specify file type as C
+      -create-app               Run appmake on the resulting binary to create emulator usable file
+
+M4 options:
+      -Cm                       Add an option to m4
+      -copy-back-after-m4       Copy files back after processing with m4
+
+Preprocessor options:
+      -M                        Emit Makefile dependencies (implies no further processing)
+      -MM                       Emit Makefile dependencies, including system headers (implies no further processing)
+      -MF                       Emit Makefile dependencies, including system headers (implies -E)
+      -MD                       Generate a .d file with dependencies, including system headers
+      -MMD                      Generate a .d file with dependencies
+      -MT                       Specify the dependency target
+      -Cp                       Add an option to the preprocessor
+      -D                        Define a preprocessor option
+      -U                        Undefine a preprocessor option
+      -I                        Add an include directory for the preprocessor
+      -iquote                   Add a quoted include path for the preprocessor
+      -isystem                  Add a system include path for the preprocessor
+
+Compiler (all) options:
+      -compiler                 Set the compiler type from the command line (sccz80,sdcc)
+      --c-code-in-asm           Add C code to .asm files
+      --opt-code-speed          Optimize for code speed
+      -debug                    Enable debugging support
+      --allseg                  Redirect all compiler output to the same segment
+      --codeseg                 Redirect compiler code segment
+      --constseg                Redirect compiler const segment
+      --dataseg                 Redirect compiler data segment
+      --bssseg                  Redirect compiler bss segment
+
+Compiler (sccz80) options:
+      -Cc                       Add an option to sccz80
+      -set-r2l-by-default       (sccz80) Use r2l calling convention by default
+      -O                        Set the peephole optimiser setting for copt
+      -Ch                       Add an option to the sccz80 peepholer
+
+Compiler (sdcc) options:
+      -Cs                       Add an option to sdcc
+      --opt-code-size           Optimize for code size (sdcc only)
+      -SO                       Set the peephole optimiser setting for sdcc-peephole
+      --fsigned-char            Use signed chars by default
+
+Compiler (clang/llvm) options:
+      -Cg                       Add an option to clang
+      -clang                    Stop after translating .c files to llvm ir
+      -llvm                     Stop after llvm-cbe generates new .cbe.c files
+      -Co                       Add an option to llvm-opt
+      -Cv                       Add an option to llvm-cbe
+      -zopt                     Enable llvm-optimizer (clang only)
+
+Assembler options:
+      -Ca                       Add an option to the assembler
+      -z80-verb                 Make the assembler more verbose
+
+Linker options:
+      -Cl                       Add an option to the linker
+      -L                        Add a library search path
+      -l                        Add a library
+      -bn                       Set the output file for the linker stage
+      -reloc-info               Generate binary file relocation information
+   -m -gen-map-file             Generate an output map of the final executable
+   -s -gen-symbol-file          Generate a symbol map of the final executable
+      --list                    Generate list files
+
+Appmake options:
+      -Cz                       Add an option to appmake
+
+Misc options:
+      -g                        Generate a global defc file of the final executable (-g -gp -gpf:filename)
+      -alias                    Define a command line alias
+      --lstcwd                  Paths in .lst files are relative to the current working dir
+      -custom-copt-rules        Custom user copt rules
+      -no-cleanup               Don't cleanup temporary files
+
+Argument Aliases:
+

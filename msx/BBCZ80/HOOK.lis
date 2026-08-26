@@ -1,0 +1,72 @@
+../BBCZ80/HOOK.asm:
+     1                          ;
+     2                          
+     3                          	SECTION BASIC
+     4                          
+     5                          	GLOBAL	CLG
+     6                          	GLOBAL	COLOUR
+     7                          	GLOBAL	DRAW
+     8                          	GLOBAL	ENVEL
+     9                          	GLOBAL	GCOL
+    10                          	GLOBAL	MODE
+    11                          	GLOBAL	MOVE
+    12                          	GLOBAL	PLOT
+    13                          	GLOBAL	SOUND
+    14                          	GLOBAL	PUTIMS
+    15                          	GLOBAL	CIRCLE
+    16                          	GLOBAL	ELLIPS
+    17                          	GLOBAL	FILL
+    18                          	GLOBAL	MOUSE
+    19                          	GLOBAL	ORIGIN
+    20                          	GLOBAL	RECTAN
+    21                          	GLOBAL	LINE
+    22                          	GLOBAL	TINT
+    23                          	GLOBAL	WAIT
+    24                          	GLOBAL	SYS
+    25                          	GLOBAL	CSRON
+    26                          	GLOBAL	CSROFF
+    27                          ;
+    28                          	GLOBAL	ADVAL
+    29                          	GLOBAL	POINT
+    30                          	GLOBAL	GETIMS
+    31                          	GLOBAL	TINTFN
+    32                          	GLOBAL	MODEFN
+    33                          	GLOBAL	WIDFN
+    34                          ;
+    35                          	EXTERN	EXTERR
+    36                          ;
+    37                          CLG:
+    38                          COLOUR:
+    39                          DRAW:
+    40                          ENVEL:
+    41                          GCOL:
+    42                          MODE:
+    43                          MOVE:
+    44                          PLOT:
+    45                          SOUND:
+    46                          ADVAL:
+    47                          POINT:
+    48                          GETIMS:
+    49                          PUTIMS:
+    50                          CIRCLE:
+    51                          ELLIPS:
+    52                          FILL:
+    53                          MOUSE:
+    54                          ORIGIN:
+    55                          RECTAN:
+    56                          LINE:
+    57                          TINT:
+    58                          TINTFN:
+    59                          MODEFN:
+    60                          WIDFN:
+    61                          WAIT:
+    62                          SYS:
+    63                          CSRON:
+    64                          CSROFF:
+    65  0000  af                	XOR	A
+    66  0001  cd0000            	CALL	EXTERR
+    67  0004  536f727279        	DEFM	"Sorry"
+    68  0009  00                	DEFB	0
+    69                          ;
+    70                          	;END
+    71                          

@@ -16,3 +16,22 @@ to build the Acorn Z80 Second Processor edition.
 
 Note that the name 'BBC BASIC' is used by permission of the British Broadcasting Corporation
 and is not transferrable to a derived or forked work.
+
+
+
+# Howto Compile
+
+## Need Product: 
+
+ Nmake 
+
+ Z88DK
+
+## Compoile Command : 
+
+ tools/dev.bat
+
+ make
+
+
+

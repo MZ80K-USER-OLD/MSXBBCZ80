@@ -1,0 +1,232 @@
+../BBCZ80/DIST.asm:
+     1                          ;	TITLE	BBCDIST.Z80 (C) R.T.RUSSELL 1982-2024
+     2                          ;
+     3                          ;BBC BASIC (Z80) - CP/M VERSION 2.20 & 3.00
+     4                          ;(C) COPYRIGHT R.T.RUSSELL, 1982-2024.
+     5                          ;ALL RIGHTS RESERVED.
+     6                          ;
+     7                          ;THIS PROGRAM ALLOWS THE USER TO ADAPT BBC BASIC TO THE
+     8                          ;PARTICULAR CHARACTERISTICS OF HIS SYSTEM HARDWARE ETC.
+     9                          ;
+    10                          ;THE PROGRAM RESIDES AT 100H FOR EASE OF LOADING.
+    11                          ;*** IT MUST NOT EXCEED 256 BYTES IN TOTAL LENGTH ***
+    12                          ;
+    13                          ;PLEASE NOTE THAT A Z80 PROCESSOR AND CP/M VERSION 2.2
+    14                          ;OR LATER ARE REQUIRED.
+    15                          ;
+    16                          ;R.T.RUSSELL, 11-03-1984, 03-05-1989, 12-05-2024
+    17                          ;
+    18                          CPM	EQU	5
+    19                          
+    20                          
+    21                          	SECTION  DIST
+    22                          
+    23                          ;COLD	EQU	200H
+    24                          ;
+    25                          	GLOBAL	CLRSCN
+    26                          	GLOBAL	PUTCSR
+    27                          	GLOBAL	GETCSR
+    28                          	GLOBAL	PUTIME
+    29                          	GLOBAL	GETIME
+    30                          	GLOBAL	GETKEY
+    31                          	GLOBAL	BYE
+    32                          ;	MAIN
+    33                          	EXTERN	COLD
+    34                          
+    35                          #ifdef MSXBIOS
+    36                          ;	MSXBIOS
+    37                          	EXTERN	msxCheckMSX2
+    38                          
+    39                          #endif
+    40                          
+    41                          	ORG	100H
+    42                          ;
+    43                          ;JUMP TABLE - BASIC makes calls to hardware-dependent
+    44                          ;features via this table:
+    45                          ;
+    46  0000  c32400            INIT0:	JP	INIT	;INITIALISE HARDWARE
+    47  0003  c3a100            CLRSCN:	JP	CLS		;CLEAR SCREEN
+    48  0006  c3a200            PUTCSR:	JP	PCSR	;SET CURSOR POSN.
+    49  0009  c3a300            GETCSR:	JP	GCSR	;READ CURSOR POSN.
+    50  000c  c33e00            PUTIME:	JP	PTIME	;SET ELAPSED TIME
+    51  000f  c32b00            GETIME:	JP	GTIME	;READ ELAPSED TIME
+    52  0012  c37f00            GETKEY:	JP	INKEY	;READ KEY (TIME LIMIT)
+    53  0015  c32a00            BYE:	JP	REBOOT	;RETURN TO CP/M
+    54                          ;
+    55                          ;BDOS	- Save the IX and IY registers and before performing a
+    56                          ;	  CP/M function call.
+    57                          ;
+    58  0018  dde5              BDOS:	PUSH	IX
+    59  001a  fde5              	PUSH	IY
+    60  001c  cd0500            	CALL	CPM
+    61  001f  fde1              	POP	IY
+    62  0021  dde1              	POP	IX
+    63  0023  c9                	RET
+    64                          ;
+    65                          ;INIT	- Perform hardware initialisation (if any).
+    66                          ;
+    67                          INIT:
+    68                          #ifdef MSXBIOS
+    69  0024  cd0000            	CALL msxCheckMSX2
+    70                          #endif
+    71  0027  c30000            	JP COLD
+    72                          
+    73  002a  c7                REBOOT:	RST	0
+    74                          ;
+    75                          ;GTIME	- Read elapsed-time clock.
+    76                          ;  	  Outputs: DEHL = elapsed time (centiseconds)
+    77                          ; 	  Destroys: A,D,E,H,L,F
+    78                          ;
+    79  002b  c5                GTIME:	PUSH	BC
+    80  002c  cd5700            	CALL	TICKS
+    81  002f  ed4b0000          	LD	BC,(OFFLO)
+    82  0033  09                	ADD	HL,BC
+    83  0034  eb                	EX	DE,HL
+    84  0035  ed4b0200          	LD	BC,(OFFHI)
+    85  0039  ed4a              	ADC	HL,BC
+    86  003b  eb                	EX	DE,HL
+    87  003c  c1                	POP	BC
+    88  003d  c9                	RET
+    89                          ;
+    90                          ;PTIME	- Load elapsed-time clock.
+    91                          ;   	  Inputs: DEHL = time to load (centiseconds)
+    92                          ; 	  Destroys: A,D,E,H,L,F
+    93                          ;
+    94  003e  c5                PTIME:	PUSH	BC
+    95  003f  d5                	PUSH	DE
+    96  0040  e5                	PUSH	HL
+    97  0041  cd5700            	CALL	TICKS
+    98  0044  44                	LD	B,H
+    99  0045  4d                	LD	C,L
+   100  0046  e1                	POP	HL
+   101  0047  b7                	OR	A
+   102  0048  ed42              	SBC	HL,BC
+   103  004a  220000            	LD	(OFFLO),HL
+   104  004d  42                	LD	B,D
+   105  004e  4b                	LD	C,E
+   106  004f  e1                	POP	HL
+   107  0050  ed42              	SBC	HL,BC
+   108  0052  220200            	LD	(OFFHI),HL
+   109  0055  c1                	POP	BC
+   110  0056  c9                	RET
+   111                          ;
+   112                          ; Get OS elapsed-time clock
+   113                          ;  Outputs: DEHL = time (centiseconds)
+   114                          ; Destroys: A,B,C,D,E,H,L,F
+   115                          ;
+   116  0057  0ef8              TICKS:	LD	C,248		;RunCPM-specific function call
+   117  0059  cd1800            	CALL	BDOS
+   118  005c  d5                	PUSH	DE
+   119  005d  eb                	EX	DE,HL
+   120  005e  b7                	OR	A
+   121  005f  ed62              	SBC	HL,HL
+   122  0061  01fbff            	LD	BC,-5
+   123  0064  3e20              	LD	A,32
+   124  0066  09                DIV0:	ADD	HL,BC
+   125  0067  da6c00            	JP	C,DIV1
+   126  006a  ed42              	SBC	HL,BC
+   127  006c  cb13              DIV1:	RL	E
+   128  006e  cb12              	RL	D
+   129  0070  e3                	EX	(SP),HL
+   130  0071  cb15              	RL	L
+   131  0073  cb14              	RL	H
+   132  0075  e3                	EX	(SP),HL
+   133  0076  ed6a              	ADC	HL,HL
+   134  0078  3d                	DEC	A
+   135  0079  c26600            	JP	NZ,DIV0
+   136  007c  eb                	EX	DE,HL
+   137  007d  d1                	POP	DE
+   138  007e  c9                	RET
+   139                          
+   140                          ;
+   141                          ;INKEY	- Sample keyboard with specified wait.
+   142                          ;   	  Inputs: HL = Time to wait (centiseconds)
+   143                          ;  	  Outputs: Carry reset indicates time-out.
+   144                          ;                  If carry set, A = character typed.
+   145                          ; 	  Destroys: A,D,E,H,L,F
+   146                          ;
+   147  007f  c5                INKEY:	PUSH	BC
+   148  0080  e5                	PUSH	HL
+   149  0081  cd5700            	CALL	TICKS
+   150  0084  d1                	POP	DE
+   151  0085  19                	ADD	HL,DE
+   152  0086  e5                WAIT:	PUSH	HL
+   153  0087  0e06              	LD	C,6
+   154  0089  1eff              	LD	E,0FFH
+   155  008b  cd1800            	CALL	BDOS
+   156  008e  e1                	POP	HL
+   157  008f  b7                	OR	A
+   158  0090  37                	SCF
+   159  0091  c29f00            	JP	NZ,INKEY1
+   160  0094  e5                	PUSH	HL
+   161  0095  cd5700            	CALL	TICKS
+   162  0098  d1                	POP	DE
+   163  0099  ed52              	SBC	HL,DE
+   164  009b  eb                	EX	DE,HL
+   165  009c  da8600            	JP	C,WAIT
+   166  009f  c1                INKEY1:	POP	BC
+   167  00a0  c9                	RET
+   168                          ;
+   169                          ;CLS	- Clear screen.
+   170                          ;	  (Customise to suit your VDU)
+   171                          ; 	  Destroys: A,D,E,H,L,F
+   172                          ;
+   173  00a1  c9                CLS:	RET
+   174                          ;
+   175                          ;PCSR	- Move cursor to specified position.
+   176                          ;   	  Inputs: DE = horizontal position (LHS=0)
+   177                          ;                 HL = vertical position (TOP=0)
+   178                          ; 	  Destroys: A,D,E,H,L,F
+   179                          ;
+   180  00a2  c9                PCSR:	RET
+   181                          ;
+   182                          ;GCSR	- Return cursor coordinates.
+   183                          ;   	  Outputs:  DE = X coordinate (POS)
+   184                          ;                   HL = Y coordinate (VPOS)
+   185                          ;  	  Destroys: A,D,E,H,L,F
+   186                          ;
+   187  00a3  110000            GCSR:	LD	DE,0
+   188  00a6  210000            	LD	HL,0
+   189  00a9  c9                	RET
+   190                          ;
+   191                          ;COUT - Output a character to the console
+   192                          ;   Inputs: A = character
+   193                          ; Destroys: A,F
+   194                          ;
+   195  00aa  c5                COUT:	PUSH	BC
+   196  00ab  d5                	PUSH	DE
+   197  00ac  e5                	PUSH	HL
+   198  00ad  5f                	LD	E,A
+   199  00ae  0e02              	LD	C,2
+   200  00b0  cd1800            	CALL	BDOS
+   201  00b3  e1                	POP	HL
+   202  00b4  d1                	POP	DE
+   203  00b5  c1                	POP	BC
+   204  00b6  c9                	RET
+   205                          
+   206                          
+   207                          ;
+   208                          	IF	$ >  1F0H
+   209                          	ERROR	"INSUFFICIENT SPACE"
+   210                          	ENDIF
+   211                          ;
+   212                          	SECTION TERMSEG
+   213                          	ORG 01F0H
+   214                          ;
+   215  0000  0000              OFFLO:		DEFW	0		;TIME OFFSET LO
+   216  0002  0000              OFFHI:		DEFW	0		;TIME OFFSET HI
+   217  0004  50                WIDTH:		DEFB	80		;WIDTH
+   218  0005  07                CURUP:		DEFB	'G' & 1FH	;CURSOR UP
+   219  0006  0f                CURDOWN:	DEFB	'O' & 1FH	;CURSOR DOWN
+   220  0007  06                CURHOME:	DEFB	'F' & 1FH	;START OF LINE
+   221  0008  0e                CUREND:		DEFB	'N' & 1FH	;END OF LINE
+   222  0009  18                DELLINE:	DEFB	'X' & 1FH	;DELETE TO END OF LINE
+   223  000a  08                BACKSP:		DEFB	08H		;BACKSPACE & DELETE
+   224  000b  15                DELTOST:	DEFB	'U' & 1FH	;DEL TO START OF LINE
+   225  000c  0a                CURLEFT:	DEFB	'J' & 1FH	;CURSOR LEFT
+   226  000d  0c                CURRIGHT:	DEFB	'L' & 1FH	;CURSOR RIGHT
+   227  000e  12                DELCHR:		DEFB	'R' & 1FH	;DELETE CHARACTER
+   228  000f  11                INSCHR:		DEFB	'Q' & 1FH	;INS/OVR TOGGLE
+   229                          ;
+   230                          FIN:	;END
+   231                          

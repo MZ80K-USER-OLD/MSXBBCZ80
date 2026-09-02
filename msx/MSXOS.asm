@@ -60,7 +60,9 @@
 	EXTERN	USER
 	EXTERN	VERMSG
 	EXTERN  WIDTH
+	EXTERN	PATHBUF
 	EXTERN	DOS_VER
+	EXTERN	DIRFIB
 
 ;MSXBIOS specific routines
 	EXTERN msxPINLINE 
@@ -631,6 +633,72 @@ FIND1:	LD	A,E
 ;           BC = 128
 ; Destroys: A,B,C,H,L,F
 ;
+; MSX-DOS2 path-aware compatibility shim.
+; Keep the raw path string in PATHBUF so command handlers can migrate from
+; CP/M FCB parsing to path-based DOS calls without immediately breaking the
+; legacy file layer.
+;
+PATHSAVE:	LD	DE,PATHBUF
+	XOR	A
+PATHS1:	LD	A,(HL)
+	OR	A
+	JR	Z,PATHS2
+	CP	CR
+	JR	Z,PATHS2
+	CP	' '
+	JR	Z,PATHS2
+	CP	'='
+	JR	Z,PATHS2
+	CP	'"'
+	JR	Z,PATHS2
+	CP	'|'
+	JR	Z,PATHS2
+	CP	'/'
+	JR	Z,PATHS3
+	CP	5CH		; '\'
+	JR	Z,PATHS3
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	JR	PATHS1
+PATHS3:	LD	A,5CH
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	JR	PATHS1
+PATHS2:	XOR	A
+	LD	(DE),A
+	RET
+;
+;PATHNORM - normalise a path string stored in PATHBUF to a DOS2-friendly form.
+;   Normalises '/' to '\' and uppercases the drive/path characters.
+;   The original FCB-based layer still receives the CP/M-compatible name, but
+;   PATHBUF preserves the full path information needed for a later DOS2 switch.
+;
+PATHNORM:	PUSH	AF
+	PUSH	DE
+	PUSH	HL
+	LD	HL,PATHBUF
+PATHN1:	LD	A,(HL)
+	OR	A
+	JR	Z,PATHNEND
+	CP	'/'
+	JR	Z,PATHN2
+	CP	5CH
+	JR	Z,PATHN2
+	CALL	UPPRC
+	LD	(HL),A
+	INC	HL
+	JR	PATHN1
+PATHN2:	LD	A,5CH
+	LD	(HL),A
+	INC	HL
+	JR	PATHN1
+PATHNEND:	POP	HL
+	POP	DE
+	POP	AF
+	RET
+;
 ;FCB FORMAT (36 BYTES TOTAL):
 ; 0      0=SAME DISK, 1=DISK A, 2=DISK B (ETC.)
 ; 1-8    FILENAME, PADDED WITH SPACES
@@ -641,6 +709,9 @@ FIND1:	LD	A,E
 SETUP0:	LD	A,' '
 SETUP:	PUSH	DE
 	PUSH	HL
+	PUSH	AF
+	CALL	PATHSAVE
+	POP	AF
 	LD	DE,FCB+9
 	LD	HL,BBC
 	LD	BC,3
@@ -778,14 +849,18 @@ OSCLI:	CALL	SKIPSP
 	RET	Z
 	CP	'.'
 	JP	Z,DOT		;*.
+	CP	'*'
+	JR	NZ,OSCLIC
+	INC	HL
+OSCLIC:
 	EX	DE,HL
-	LD	HL,COMDS
+	LD	HL,COMDS ; OS command table
 OSCLI0:	LD	A,(DE)
 	CALL	UPPRC
 	CP	(HL)
 	JR	Z,OSCLI2
-	JR	C,HUH
-OSCLI1:	BIT	7,(HL)
+	JP	C,HUH   ;END　OF　OS Command Table
+OSCLI1:	BIT	7,(HL)  ;　 
 	INC	HL
 	JR	Z,OSCLI1
 	INC	HL
@@ -895,8 +970,14 @@ SAVLO1:	CALL	HEX
 DOT:	INC	HL
 DIR:	LD	A,'?'		;*DIR
 	CALL	SETUP
+	PUSH	AF
+	CALL	PATHNORM
+	POP	AF
 	CP	CR
 	JR	NZ,HUH
+	LD	A,(DOS_VER)
+	CP	2
+	JR	NC,DIRDOS2
 	LD	C,17
 DIR0:	LD	B,4
 DIR1:	CALL	LTRAP
@@ -951,6 +1032,74 @@ PAD:	LD	A,' '
 	DJNZ	PAD
 	POP	BC
 	JR	DIR1
+;
+; MSX-DOS2 directory search.  FFIRST/FNEXT use IX as a 64-byte
+; file information block rather than a file handle.
+;
+DIRDOS2:
+	LD	HL,PATHBUF
+	LD	A,(HL)
+	OR	A
+	JR	NZ,DIRD21
+	LD	(HL),'*'
+	INC	HL
+	LD	(HL),'.'
+	INC	HL
+	LD	(HL),'*'
+	INC	HL
+	LD	(HL),0
+DIRD21:
+	CALL	LTRAP
+	LD	DE,PATHBUF
+	LD	IX,DIRFIB
+	LD	B,10H		; Include directory entries.
+	LD	C,40H		; FFIRST
+	CALL	BDOS
+	OR	A
+	JR	NZ,DIRD2END
+	LD	B,4		; Four filenames per output line.
+DIRD22:
+	LD	HL,DIRFIB+1	; FIB filename field (ASCIIZ).
+	CALL	DIRD2PUT
+	DJNZ	DIRD23
+	CALL	CRLF
+	LD	B,4
+DIRD23:
+	PUSH	BC
+	CALL	LTRAP
+	LD	IX,DIRFIB
+	LD	C,41H		; FNEXT
+	CALL	BDOS
+	POP	BC
+	OR	A
+	JR	Z,DIRD22
+	LD	A,B
+	CP	4
+	CALL	NZ,CRLF
+DIRD2END:
+	RET
+;
+;DIRD2PUT - Print an ASCIIZ filename in a 13-character column.
+;   Inputs: HL = address of filename
+;   Destroys: A,C,H,L,F
+;
+DIRD2PUT:
+	LD	C,13
+DIRD2P1:
+	LD	A,(HL)
+	OR	A
+	JR	Z,DIRD2P2
+	INC	HL
+	CALL	OSWRCH
+	DEC	C
+	JR	NZ,DIRD2P1
+	RET
+DIRD2P2:
+	LD	A,' '
+	CALL	OSWRCH
+	DEC	C
+	JR	NZ,DIRD2P2
+	RET
 ;
 OPT:	CALL	HEX		;*OPT
 	LD	A,E
@@ -1306,6 +1455,7 @@ CheckMSXDOS:
     ld   (DOS_VER), a ; 変数に格納
 
     ; --- 判定と表示 ---
+	ld   a, (DOS_VER)
     cp   2
     jr   nc, print_dos2
 

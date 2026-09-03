@@ -14,8 +14,31 @@ editions, it (just!) fits in 16 Kbytes so could be held in a ROM of this size.  
 the blue box are used to build the generic CP/M edition.  The files in the red box are used
 to build the Acorn Z80 Second Processor edition.
 
+On the BBC Micro, the operating-system component is known as the MOS
+(Machine Operating System).  This project uses `MSXMOS.asm` for the corresponding
+MSX-specific operating-system interface.
+Routine names such as `OSINIT`, `OSLOAD`, `OSSAVE`, and `OSBGET` originate from
+the MOS system-call interface used by the BBC Micro versions of BBC BASIC.  The
+MSX implementation keeps these names as the operating-system abstraction layer,
+while connecting them to the appropriate MSX-DOS and MSX BIOS services.
+
 Note that the name 'BBC BASIC' is used by permission of the British Broadcasting Corporation
 and is not transferrable to a derived or forked work.
+
+# MSX-DOS2 Subdirectory Support
+
+On MSX-DOS2, `LOAD`, `*LOAD`, and program loading through `CHAIN` or `RUN` can
+access files in subdirectories. Use an MSX-DOS path in the filename, for example:
+
+```basic
+LOAD "SUBDIR\\PROGRAM"
+*LOAD SUBDIR\\PROGRAM
+```
+
+The MSX-DOS2 build opens these files through DOS2 file handles. The existing
+FCB-based implementation is retained for MSX-DOS1 and CP/M-compatible systems.
+Other file commands, including `OPENIN`, `OPENOUT`, `OPENUP`, and `SAVE`, still
+use the legacy FCB path and do not yet provide subdirectory support.
 
 # Repository Structure
 
@@ -44,7 +67,7 @@ MSX_BBC-BASIC/
 ├── msx/                      # MSX-specific build files and generated outputs
 │   ├── Makefile
 │   ├── MSXBIOS.asm
-│   ├── MSXOS.asm
+│   ├── MSXMOS.asm
 │   ├── BBCZ80/
 │   │   ├── ASMB.lis
 │   │   ├── DATA.lis

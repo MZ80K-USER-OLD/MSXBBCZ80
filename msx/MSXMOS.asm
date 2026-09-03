@@ -32,6 +32,9 @@
 	GLOBAL  PrintAddress
 	GLOBAL  PUTCRLF
 	GLOBAL  STRPUT
+	GLOBAL  HOPEN
+	GLOBAL  HCLOSE
+	GLOBAL  HREAD
 
 ; Primary OS routines
 	GLOBAL	CLS
@@ -63,6 +66,15 @@
 	EXTERN	PATHBUF
 	EXTERN	DOS_VER
 	EXTERN	DIRFIB
+	EXTERN	FILE_HANDLE
+	EXTERN	FILE_COUNTS
+	EXTERN	FILE_MAXSIZE
+	EXTERN	FILE_BUFADRS
+	EXTERN	SEEK_PREV_L
+	EXTERN	SEEK_PREV_H
+	EXTERN	SEEK_CUR_L
+	EXTERN	SEEK_CUR_H
+	EXTERN	REQ_BYTES
 
 ;MSXBIOS specific routines
 	EXTERN msxPINLINE 
@@ -188,7 +200,10 @@ STLOAD:	CALL	SAVLOD		;*LOAD
 	PUSH	HL
 	JR	OSL1
 ;
-OSLOAD:	PUSH	BC		;LOAD
+OSLOAD:	LD	A,(DOS_VER)
+	CP	2
+	JP	NC,OSLOAD_DOS2
+OSLOAD_CPM:	PUSH	BC		;LOAD
 	CALL	SETUP0
 OSL1:	EX	DE,HL
 	CALL	OPEN
@@ -211,6 +226,189 @@ LOAD1:	POP	BC
 	POP	AF
 	CCF
 OSCALL:	RET
+
+;OSLOAD_DOS2 - Load through an MSX-DOS2 file handle.
+; _READ does not return a reliable byte count on the target, so the count is
+; calculated from the file-position difference before and after each read.
+; Each read is limited to 512 bytes.
+;
+OSLOAD_DOS2:
+	LD	(FILE_BUFADRS),DE
+	LD	(FILE_MAXSIZE),BC
+	CALL	SETUP0
+	CALL	PATHNORM
+	CALL	DOS2_DEFAULT_EXT
+
+	LD	DE,PATHBUF
+	LD	A,1			; read-only
+	CALL	HOPEN
+	OR	A
+	JP	NZ,LOAD_DOS2_NOTFOUND
+
+LOAD_DOS2_LOOP:
+	LD	HL,(FILE_MAXSIZE)
+	LD	A,H
+	OR	L
+	JR	Z,LOAD_DOS2_CLOSE_OK
+
+	LD	DE,BLOCKSIZE
+	OR	A
+	SBC	HL,DE
+	JR	NC,LOAD_DOS2_FULL_BLOCK
+	ADD	HL,DE
+	LD	(REQ_BYTES),HL
+	JR	LOAD_DOS2_HAVE_REQUEST
+
+LOAD_DOS2_FULL_BLOCK:
+	LD	HL,BLOCKSIZE
+	LD	(REQ_BYTES),HL
+
+LOAD_DOS2_HAVE_REQUEST:
+	LD	DE,(FILE_BUFADRS)
+	LD	HL,(REQ_BYTES)
+	CALL	HREAD
+	OR	A
+	JR	NZ,LOAD_DOS2_ERROR
+	LD	A,H
+	OR	L
+	JR	Z,LOAD_DOS2_CLOSE_OK
+
+	LD	(FILE_BUFADRS),DE
+	LD	DE,(FILE_COUNTS)
+	LD	HL,(FILE_MAXSIZE)
+	OR	A
+	SBC	HL,DE
+	JR	C,LOAD_DOS2_ERROR
+	LD	(FILE_MAXSIZE),HL
+
+	LD	HL,(REQ_BYTES)
+	OR	A
+	SBC	HL,DE
+	JR	C,LOAD_DOS2_ERROR
+	JR	Z,LOAD_DOS2_LOOP
+	JR	LOAD_DOS2_CLOSE_OK	; short read means EOF
+
+LOAD_DOS2_CLOSE_OK:
+	CALL	HCLOSE
+	SCF
+	RET
+
+LOAD_DOS2_NOTFOUND:
+	LD	A,214
+	CALL	EXTERR
+	DEFM	"File not found"
+	DEFB	0
+
+LOAD_DOS2_ERROR:
+	PUSH	AF
+	CALL	HCLOSE
+	POP	AF
+	LD	A,255
+	CALL	EXTERR
+	DEFM	"MSX-DOS2 file error"
+	DEFB	0
+
+; HOPEN - Open an MSX-DOS2 file.
+;   Inputs: DE = ASCIIZ filename, A = access mode
+;  Outputs: A = error code (0 on success), FILE_HANDLE = file handle
+; Destroys: A,C,DE,HL,F
+HOPEN:
+	LD	C,43H			; _OPEN
+	CALL	BDOS
+	OR	A
+	RET	NZ
+	LD	A,B
+	LD	(FILE_HANDLE),A
+	XOR	A
+	RET
+
+; HCLOSE - Close an MSX-DOS2 file handle.
+;   Inputs: FILE_HANDLE = file handle
+;  Outputs: A = error code (0 on success)
+; Destroys: A,BC,DE,HL,F
+HCLOSE:
+	LD	A,(FILE_HANDLE)
+	LD	B,A
+	LD	C,45H			; _CLOSE
+	CALL	BDOS
+	RET
+
+; HREAD - Read bytes through an MSX-DOS2 file handle.
+;   Inputs: FILE_HANDLE = file handle, DE = destination buffer,
+;           HL = requested bytes
+;  Outputs: A = error code (0 on success), DE = next buffer address,
+;           HL = actual bytes read
+; Destroys: A,BC,F
+HREAD:
+	LD	(FILE_BUFADRS),DE
+	LD	(REQ_BYTES),HL
+	LD	A,(FILE_HANDLE)
+	LD	B,A
+	CALL	DOS2_SEEK_CURRENT
+	RET	NZ
+	LD	(SEEK_PREV_L),HL
+	LD	(SEEK_PREV_H),DE
+
+	LD	A,(FILE_HANDLE)
+	LD	B,A
+	LD	DE,(FILE_BUFADRS)
+	LD	HL,(REQ_BYTES)
+	LD	C,46H			; _READ
+	CALL	BDOS
+	OR	A
+	RET	NZ
+
+	LD	A,(FILE_HANDLE)
+	LD	B,A
+	CALL	DOS2_SEEK_CURRENT
+	RET	NZ
+	LD	(SEEK_CUR_L),HL
+	LD	(SEEK_CUR_H),DE
+	CALL	DOS2_CALC_DELTA
+	JR	C,HREAD_DELTA_ERROR
+	LD	DE,(FILE_BUFADRS)
+	PUSH	HL
+	ADD	HL,DE
+	EX	DE,HL
+	POP	HL
+	RET
+
+HREAD_DELTA_ERROR:
+	LD	A,255
+	OR	A
+	RET
+
+; Return the current 32-bit position in DE:HL.
+DOS2_SEEK_CURRENT:
+	LD	A,1			; current-position origin, offset zero
+	LD	DE,0
+	LD	HL,0
+	LD	C,48H			; _SEEK
+	CALL	BDOS
+	RET
+
+; Return HL = low-word delta. Carry indicates a non-zero high-word delta.
+DOS2_CALC_DELTA:
+	LD	HL,(SEEK_CUR_L)
+	LD	DE,(SEEK_PREV_L)
+	OR	A
+	SBC	HL,DE
+	PUSH	HL
+	LD	HL,(SEEK_CUR_H)
+	LD	DE,(SEEK_PREV_H)
+	SBC	HL,DE
+	POP	DE
+	LD	A,H
+	OR	L
+	JR	NZ,DOS2_DELTA_ERROR
+	EX	DE,HL
+	LD	(FILE_COUNTS),HL
+	OR	A
+	RET
+
+DOS2_DELTA_ERROR:
+	SCF
+	RET
 ;
 ;OSOPEN - Open a file for reading or writing.
 ;   Inputs: HL addresses filename (term CR)
@@ -696,6 +894,43 @@ PATHN2:	LD	A,5CH
 	JR	PATHN1
 PATHNEND:	POP	HL
 	POP	DE
+	POP	AF
+	RET
+
+; Add the BASIC default extension to PATHBUF when the supplied path has none.
+DOS2_DEFAULT_EXT:
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	HL,PATHBUF
+	LD	B,0
+DOS2_EXT_SCAN:
+	LD	A,(HL)
+	OR	A
+	JR	Z,DOS2_EXT_END
+	CP	'.'
+	JR	Z,DOS2_EXT_HAVE
+	INC	HL
+	INC	B
+	JR	DOS2_EXT_SCAN
+DOS2_EXT_END:
+	LD	A,B
+	CP	61			; PATHBUF capacity (including terminator)
+	JR	NC,DOS2_EXT_HAVE
+	LD	(HL),'.'
+	INC	HL
+	LD	(HL),'B'
+	INC	HL
+	LD	(HL),'B'
+	INC	HL
+	LD	(HL),'C'
+	INC	HL
+	LD	(HL),0
+DOS2_EXT_HAVE:
+	POP	HL
+	POP	DE
+	POP	BC
 	POP	AF
 	RET
 ;
@@ -1541,6 +1776,7 @@ FCB	EQU	5CH
 DSKBUF	EQU	80H
 ;
 FCBSIZ	EQU	128+36+2
+BLOCKSIZE EQU 256
 ;
 TRPCNT:	DEFB	10
 TABLE:	DEFS	16		;FILE BLOCK POINTERS

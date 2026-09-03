@@ -67,13 +67,8 @@
 	EXTERN	DOS_VER
 	EXTERN	DIRFIB
 	EXTERN	FILE_HANDLE
-	EXTERN	FILE_COUNTS
 	EXTERN	FILE_MAXSIZE
 	EXTERN	FILE_BUFADRS
-	EXTERN	SEEK_PREV_L
-	EXTERN	SEEK_PREV_H
-	EXTERN	SEEK_CUR_L
-	EXTERN	SEEK_CUR_H
 	EXTERN	REQ_BYTES
 
 ;MSXBIOS specific routines
@@ -228,8 +223,7 @@ LOAD1:	POP	BC
 OSCALL:	RET
 
 ;OSLOAD_DOS2 - Load through an MSX-DOS2 file handle.
-; _READ does not return a reliable byte count on the target, so the count is
-; calculated from the file-position difference before and after each read.
+; _READ returns the actual byte count in HL.
 ; Each read is limited to 512 bytes.
 ;
 OSLOAD_DOS2:
@@ -274,7 +268,7 @@ LOAD_DOS2_HAVE_REQUEST:
 	JR	Z,LOAD_DOS2_CLOSE_OK
 
 	LD	(FILE_BUFADRS),DE
-	LD	DE,(FILE_COUNTS)
+	EX	DE,HL
 	LD	HL,(FILE_MAXSIZE)
 	OR	A
 	SBC	HL,DE
@@ -337,35 +331,19 @@ HCLOSE:
 ;   Inputs: FILE_HANDLE = file handle, DE = destination buffer,
 ;           HL = requested bytes
 ;  Outputs: A = error code (0 on success), DE = next buffer address,
-;           HL = actual bytes read
+;           HL = actual bytes read returned by _READ
 ; Destroys: A,BC,F
 HREAD:
 	LD	(FILE_BUFADRS),DE
 	LD	(REQ_BYTES),HL
 	LD	A,(FILE_HANDLE)
 	LD	B,A
-	CALL	DOS2_SEEK_CURRENT
-	RET	NZ
-	LD	(SEEK_PREV_L),HL
-	LD	(SEEK_PREV_H),DE
-
-	LD	A,(FILE_HANDLE)
-	LD	B,A
 	LD	DE,(FILE_BUFADRS)
 	LD	HL,(REQ_BYTES)
-	LD	C,46H			; _READ
+	LD	C,48H			; _READ
 	CALL	BDOS
 	OR	A
 	RET	NZ
-
-	LD	A,(FILE_HANDLE)
-	LD	B,A
-	CALL	DOS2_SEEK_CURRENT
-	RET	NZ
-	LD	(SEEK_CUR_L),HL
-	LD	(SEEK_CUR_H),DE
-	CALL	DOS2_CALC_DELTA
-	JR	C,HREAD_DELTA_ERROR
 	LD	DE,(FILE_BUFADRS)
 	PUSH	HL
 	ADD	HL,DE
@@ -373,49 +351,12 @@ HREAD:
 	POP	HL
 	RET
 
-HREAD_DELTA_ERROR:
-	LD	A,255
-	OR	A
-	RET
-
-; Return the current 32-bit position in DE:HL.
-DOS2_SEEK_CURRENT:
-	LD	A,1			; current-position origin, offset zero
-	LD	DE,0
-	LD	HL,0
-	LD	C,48H			; _SEEK
-	CALL	BDOS
-	RET
-
-; Return HL = low-word delta. Carry indicates a non-zero high-word delta.
-DOS2_CALC_DELTA:
-	LD	HL,(SEEK_CUR_L)
-	LD	DE,(SEEK_PREV_L)
-	OR	A
-	SBC	HL,DE
-	PUSH	HL
-	LD	HL,(SEEK_CUR_H)
-	LD	DE,(SEEK_PREV_H)
-	SBC	HL,DE
-	POP	DE
-	LD	A,H
-	OR	L
-	JR	NZ,DOS2_DELTA_ERROR
-	EX	DE,HL
-	LD	(FILE_COUNTS),HL
-	OR	A
-	RET
-
-DOS2_DELTA_ERROR:
-	SCF
-	RET
-;
 ;OSOPEN - Open a file for reading or writing.
 ;   Inputs: HL addresses filename (term CR)
 ;           Carry set for OPENIN, cleared for OPENOUT.
-;  Outputs: A = file channel (=0 if cannot open)
-;           DE = file FCB
-; Destroys: A,B,C,D,E,H,L,F
+;   Outputs: A = file channel (=0 if cannot open)
+;            DE = file FCB
+;   Destroys: A,B,C,D,E,H,L,F
 ;
 OPENIT:	PUSH	AF		;SAVE CARRY
 	CALL	SETUP0
@@ -438,7 +379,7 @@ OPEN1:	LD	A,(HL)
 	CALL	EXTERR
 	DEFM	"Too many open files"
 	DEFB	0
-;
+
 OPEN2:	LD	DE,(FREE)	;FREE SPACE POINTER
 	LD	(HL),E
 	INC	HL
@@ -713,8 +654,7 @@ WRITE:	CALL	SETDMA
 ;
 ;INCSEC - Increment random record number.
 ;   Inputs: DE addresses FCB.
-; Destroys: F
-;
+
 INCSEC:	PUSH	HL
 	LD	HL,33
 	ADD	HL,DE
@@ -723,26 +663,26 @@ INCS1:	INC	(HL)
 	JR	Z,INCS1
 	POP	HL
 	RET
-;
+
 ;OPEN - Open a file for access.
 ;   Inputs: FCB set up.
-;  Outputs: DE = FCB
-;           A=0 & Z-flag set indicates Not Found.
-;           Carry = 0
-; Destroys: A,D,E,F
+;   Outputs: DE = FCB
+;            A=0 & Z-flag set indicates Not Found.
+;            Carry = 0
+;   Destroys: A,D,E,F
 ;
 OPEN:	LD	DE,FCB
 	LD	A,15
 	CALL	BDOS1
 	INC	A
 	RET
-;
+
 ;CREATE - Create a disk file for writing.
 ;   Inputs: FCB set up.
-;  Outputs: DE = FCB
-;           A=0 & Z-flag set indicates directory full.
-;           Carry = 0
-; Destroys: A,D,E,F
+;   Outputs: DE = FCB
+;            A=0 & Z-flag set indicates directory full.
+;            Carry = 0
+;   Destroys: A,D,E,F
 ;
 CREATE:	CALL	CHKAMB
 	LD	DE,FCB

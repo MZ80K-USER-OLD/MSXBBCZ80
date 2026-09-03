@@ -42,23 +42,18 @@
     41                          
     42                          	GLOBAL	DOS_VER
     43                          	GLOBAL	FILE_HANDLE
-    44                          	GLOBAL	FILE_COUNTS
-    45                          	GLOBAL	FILE_MAXSIZE
-    46                          	GLOBAL	FILE_BUFADRS
-    47                          	GLOBAL	SEEK_PREV_L
-    48                          	GLOBAL	SEEK_PREV_H
-    49                          	GLOBAL	SEEK_CUR_L
-    50                          	GLOBAL	SEEK_CUR_H
-    51                          	GLOBAL	REQ_BYTES
-    52                          
-    53                          	ORG $5000
+    44                          	GLOBAL	FILE_MAXSIZE
+    45                          	GLOBAL	FILE_BUFADRS
+    46                          	GLOBAL	REQ_BYTES
+    47                          
+    48                          	ORG $5000
+    49                          
+    50                          
+    51                          ;
+    52                          ;n.b. ACCS, BUFFER & STAVAR must be on page boundaries.
+    53                          ;
     54                          
-    55                          
-    56                          ;
-    57                          ;n.b. ACCS, BUFFER & STAVAR must be on page boundaries.
-    58                          ;
-    59                          
-    60  0000  0000000000000000  ACCS:	DEFS	256		;STRING ACCUMULATOR
+    55  0000  0000000000000000  ACCS:	DEFS	256		;STRING ACCUMULATOR
               0000000000000000  
               0000000000000000  
               0000000000000000  
@@ -90,7 +85,7 @@
               0000000000000000  
               0000000000000000  
               0000000000000000  
-    61  0100  0000000000000000  BUFFER:	DEFS	256		;STRING INPUT BUFFER
+    56  0100  0000000000000000  BUFFER:	DEFS	256		;STRING INPUT BUFFER
               0000000000000000  
               0000000000000000  
               0000000000000000  
@@ -122,7 +117,7 @@
               0000000000000000  
               0000000000000000  
               0000000000000000  
-    62  0200  0000000000000000  STAVAR:	DEFS	27*4		;STATIC VARIABLES
+    57  0200  0000000000000000  STAVAR:	DEFS	27*4		;STATIC VARIABLES
               0000000000000000  
               0000000000000000  
               0000000000000000  
@@ -136,9 +131,9 @@
               0000000000000000  
               0000000000000000  
               00000000          
-    63                          OC	EQU	STAVAR+15*4	;CODE ORIGIN (O%)
-    64                          PC	EQU	STAVAR+16*4	;PROGRAM COUNTER (P%)
-    65  026c  0000000000000000  DYNVAR:	DEFS	54*2		;DYN. VARIABLE POINTERS
+    58                          OC	EQU	STAVAR+15*4	;CODE ORIGIN (O%)
+    59                          PC	EQU	STAVAR+16*4	;PROGRAM COUNTER (P%)
+    60  026c  0000000000000000  DYNVAR:	DEFS	54*2		;DYN. VARIABLE POINTERS
               0000000000000000  
               0000000000000000  
               0000000000000000  
@@ -152,40 +147,35 @@
               0000000000000000  
               0000000000000000  
               00000000          
-    66  02d8  0000              FNPTR:	DEFS	2		;DYN. FUNCTION POINTER
-    67  02da  0000              PROPTR:	DEFS	2		;DYN. PROCEDURE POINTER
-    68                          ;
-    69  02dc  0000              PAGE:	DEFS	2		;START OF USER PROGRAM
-    70  02de  0000              LOMEM:	DEFS	2		;START OF DYN. STORAGE
-    71  02e0  0000              FREE:	DEFS	2		;FIRST FREE-SPACE BYTE
-    72  02e2  0000              HIMEM:	DEFS	2		;FIRST BYTE ABOVE STACK
-    73  02e4  0000              LIBASE:	DEFS	2		;START OF FIRST LIBRARY
-    74                          ;
-    75  02e6  0000              TRACEN:	DEFS	2		;TRACE FLAG AND NUMBER
-    76  02e8  0000              AUTONO:	DEFS	2		;AUTO FLAG AND NUMBER
-    77  02ea  0000              ERRTRP:	DEFS	2		;ON ERROR STMT POINTER \
-    78  02ec  0000              ONERSP:	DEFS	2		;ON ERROR LOCAL STKPTR /
-    79  02ee  0000              ERRTXT:	DEFS	2		;ERROR MESSAGE POINTER
-    80  02f0  0000              DATPTR:	DEFS	2		;DATA POINTER
-    81  02f2  0000              ERL:	DEFS	2		;LINE NO OF LAST ERROR
-    82  02f4  0000              CURLIN:	DEFS	2		;POINTER TO CURRENT LINE
-    83  02f6  0000000000        RANDOM:	DEFS	5		;RANDOM NUMBER
-    84  02fb  00                COUNT:	DEFS	1		;PRINT POSITION
-    85  02fc  00                WIDTH:	DEFS	1		;PRINT WIDTH
-    86  02fd  00                ERR:	DEFS	1		;ERROR NUMBER
-    87  02fe  00                LISTON:	DEFS	1		;LISTO & OPT FLAG
-    88  02ff  00                INCREM:	DEFS	1		;AUTO INCREMENT
-    89                          ; OS WORK AREAA
-    90  0300  00                FILE_HANDLE:	DEFS	1		;MSX-DOS2 file handle used by OSLOAD
-    91  0301  0000              FILE_BUFADRS:	DEFS	2		; バッファのアドレス保存用
-    92  0303  0000              FILE_COUNTS:	DEFS	2		; 累積読み込みバイト数
-    93  0305  0000              FILE_MAXSIZE:	DEFS	2		; 最大読み込みバイト数
-    94  0307  0000              SEEK_PREV_L:    DEFS    2       ; 読み込み前ポインタ下位16bit
-    95  0309  0000              SEEK_PREV_H:    DEFS    2       ; 読み込み前ポインタ上位16bit
-    96  030b  0000              SEEK_CUR_L:     DEFS    2       ; 読み込み後ポインタ下位16bit
-    97  030d  0000              SEEK_CUR_H:     DEFS    2       ; 読み込み後ポインタ上位16bit
-    98  030f  0000              REQ_BYTES:      DEFS    2       ; 読み込み要求バイト数
-    99  0311  0000000000000000  PATHBUF:	DEFS	64		;PATH WORK BUFFER FOR MSX-DOS2 / SUBDIR SUPPORT
+    61  02d8  0000              FNPTR:	DEFS	2		;DYN. FUNCTION POINTER
+    62  02da  0000              PROPTR:	DEFS	2		;DYN. PROCEDURE POINTER
+    63                          ;
+    64  02dc  0000              PAGE:	DEFS	2		;START OF USER PROGRAM
+    65  02de  0000              LOMEM:	DEFS	2		;START OF DYN. STORAGE
+    66  02e0  0000              FREE:	DEFS	2		;FIRST FREE-SPACE BYTE
+    67  02e2  0000              HIMEM:	DEFS	2		;FIRST BYTE ABOVE STACK
+    68  02e4  0000              LIBASE:	DEFS	2		;START OF FIRST LIBRARY
+    69                          ;
+    70  02e6  0000              TRACEN:	DEFS	2		;TRACE FLAG AND NUMBER
+    71  02e8  0000              AUTONO:	DEFS	2		;AUTO FLAG AND NUMBER
+    72  02ea  0000              ERRTRP:	DEFS	2		;ON ERROR STMT POINTER \
+    73  02ec  0000              ONERSP:	DEFS	2		;ON ERROR LOCAL STKPTR /
+    74  02ee  0000              ERRTXT:	DEFS	2		;ERROR MESSAGE POINTER
+    75  02f0  0000              DATPTR:	DEFS	2		;DATA POINTER
+    76  02f2  0000              ERL:	DEFS	2		;LINE NO OF LAST ERROR
+    77  02f4  0000              CURLIN:	DEFS	2		;POINTER TO CURRENT LINE
+    78  02f6  0000000000        RANDOM:	DEFS	5		;RANDOM NUMBER
+    79  02fb  00                COUNT:	DEFS	1		;PRINT POSITION
+    80  02fc  00                WIDTH:	DEFS	1		;PRINT WIDTH
+    81  02fd  00                ERR:	DEFS	1		;ERROR NUMBER
+    82  02fe  00                LISTON:	DEFS	1		;LISTO & OPT FLAG
+    83  02ff  00                INCREM:	DEFS	1		;AUTO INCREMENT
+    84                          ; OS WORK AREAA
+    85  0300  00                FILE_HANDLE:	DEFS	1		;MSX-DOS2 file handle used by OSLOAD
+    86  0301  0000              FILE_BUFADRS:	DEFS	2		; バッファのアドレス保存用
+    87  0303  0000              FILE_MAXSIZE:	DEFS	2		; 最大読み込みバイト数
+    88  0305  0000              REQ_BYTES:      DEFS    2       ; 読み込み要求バイト数
+    89  0307  0000000000000000  PATHBUF:	DEFS	64		;PATH WORK BUFFER FOR MSX-DOS2 / SUBDIR SUPPORT
               0000000000000000  
               0000000000000000  
               0000000000000000  
@@ -193,8 +183,8 @@
               0000000000000000  
               0000000000000000  
               0000000000000000  
-   100  0351  00                DOS_VER:	DEFS	1		;MSX-DOS VERSION
-   101  0352  0000000000000000  DIRFIB:	DEFS	64		;MSX-DOS2 FFIRST/FNEXT file information block
+    90  0347  00                DOS_VER:	DEFS	1		;MSX-DOS VERSION
+    91  0348  0000000000000000  DIRFIB:	DEFS	64		;MSX-DOS2 FFIRST/FNEXT file information block
               0000000000000000  
               0000000000000000  
               0000000000000000  
@@ -202,6 +192,6 @@
               0000000000000000  
               0000000000000000  
               0000000000000000  
-   102                          ;-------
-   103                          USER:	;END
-   104                          
+    92                          ;-------
+    93                          USER:	;END
+    94                          

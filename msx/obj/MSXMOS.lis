@@ -83,1666 +83,1775 @@ MSXMOS.asm:
     82                          	EXTERN msxSTRPUT
     83                          	EXTERN msxCHPUT
     84                          
-    85                          
-    86                          ;
-    87                          ;
-    88                          ;OSSAVE - Save an area of memory to a file.
-    89                          ;   Inputs: HL addresses filename (term CR)
-    90                          ;           DE = start address of data to save
-    91                          ;           BC = length of data to save (bytes)
-    92                          ; Destroys: A,B,C,D,E,H,L,F
-    93                          ;
-    94  0000  cdd805            STSAVE:	CALL	SAVLOD		;*SAVE
-    95  0003  daa605            	JP	C,HUH		;"Bad command"
-    96  0006  e5                	PUSH	HL
-    97  0007  1804              	JR	OSS1
-    98                          ;
-    99  0009  c5                OSSAVE:	PUSH	BC		;SAVE
-   100  000a  cd3404            	CALL	SETUP0
-   101  000d  eb                OSS1:	EX	DE,HL
-   102  000e  cd4703            	CALL	CREATE
-   103  0011  2014              	JR	NZ,SAVE
-   104  0013  3ebe              DIRFUL:	LD	A,190
-   105  0015  cd0000            	CALL	EXTERR
-   106  0018  4469726563746f72  	DEFM	"Directory full"
+    85                          IFNDEF BDOS
+    86                          BDOS		EQU	$0005			; MSX-DOS API CALL
+    87                          ENDIF
+    88                          ;
+    89                          ;
+    90                          ;OSSAVE - Save an area of memory to a file.
+    91                          ;   Inputs: HL addresses filename (term CR)
+    92                          ;           DE = start address of data to save
+    93                          ;           BC = length of data to save (bytes)
+    94                          ; Destroys: A,B,C,D,E,H,L,F
+    95                          ;
+    96  0000  cd7c06            STSAVE:	CALL	SAVLOD		;*SAVE
+    97  0003  da4a06            	JP	C,HUH		;"Bad command"
+    98  0006  e5                	PUSH	HL
+    99  0007  180c              	JR	OSS1
+   100                          ;
+   101                          OSSAVE:
+   102  0009  3a0000            	LD	A,(DOS_VER)
+   103  000c  fe02              	CP	2
+   104  000e  d2ac01            	JP	NC,OSSAVE_DOS2
+   105                          
+   106  0011  c5                	PUSH	BC		;SAVE
+   107  0012  cdd804            	CALL	SETUP0
+   108  0015  eb                OSS1:	EX	DE,HL
+   109  0016  cdeb03            	CALL	CREATE
+   110  0019  2014              	JR	NZ,SAVE
+   111  001b  3ebe              DIRFUL:	LD	A,190
+   112  001d  cd0000            	CALL	EXTERR
+   113  0020  4469726563746f72  	DEFM	"Directory full"
               792066756c6c      
-   107  0026  00                	DEFB	0
-   108  0027  cd1903            SAVE:	CALL	WRITE
-   109  002a  09                	ADD	HL,BC
-   110  002b  e3                	EX	(SP),HL
-   111  002c  ed42              	SBC	HL,BC
-   112  002e  e3                	EX	(SP),HL
-   113  002f  2802              	JR	Z,SAVE1
-   114  0031  30f4              	JR	NC,SAVE
-   115  0033  c1                SAVE1:	POP	BC
-   116  0034  3e10              CLOSE:	LD	A,16
-   117  0036  cded02            	CALL	BDOS1
-   118  0039  3c                	INC	A
-   119  003a  c0                	RET	NZ
-   120  003b  3ec8              	LD	A,200
-   121  003d  cd0000            	CALL	EXTERR
-   122  0040  436c6f7365206572  	DEFM	"Close error"
+   114  002e  00                	DEFB	0
+   115  002f  cdbd03            SAVE:	CALL	WRITE
+   116  0032  09                	ADD	HL,BC
+   117  0033  e3                	EX	(SP),HL
+   118  0034  ed42              	SBC	HL,BC
+   119  0036  e3                	EX	(SP),HL
+   120  0037  2802              	JR	Z,SAVE1
+   121  0039  30f4              	JR	NC,SAVE
+   122  003b  c1                SAVE1:	POP	BC
+   123  003c  3e10              CLOSE:	LD	A,16
+   124  003e  cd9103            	CALL	BDOS1
+   125  0041  3c                	INC	A
+   126  0042  c0                	RET	NZ
+   127  0043  3ec8              	LD	A,200
+   128  0045  cd0000            	CALL	EXTERR
+   129  0048  436c6f7365206572  	DEFM	"Close error"
               726f72            
-   123  004b  00                	DEFB	0
-   124                          ;
-   125                          ;OSSHUT - Close disk file(s).
-   126                          ;   Inputs: E = file channel
-   127                          ;           If E=0 all files are closed (except SPOOL)
-   128                          ; Destroys: A,B,C,D,E,H,L,F
-   129                          ;
-   130  004c  7b                OSSHUT:	LD	A,E
-   131  004d  b7                	OR	A
-   132  004e  200b              	JR	NZ,SHUTIT
-   133  0050  1c                SHUT0:	INC	E
-   134  0051  cb5b              	BIT	3,E
-   135  0053  c0                	RET	NZ
-   136  0054  d5                	PUSH	DE
-   137  0055  cd6c00            	CALL	SHUT1
-   138  0058  d1                	POP	DE
-   139  0059  18f5              	JR	SHUT0
-   140                          ;
-   141  005b  cda003            SHUTIT:	CALL	FIND1
-   142  005e  2010              	JR	NZ,SHUT2
-   143  0060  c38b03            	JP	CHANER
-   144                          ;
-   145  0063  211809            SESHUT:	LD	HL,FLAGS
-   146  0066  cb86              	RES	0,(HL)		;STOP EXEC
-   147  0068  cb8e              	RES	1,(HL)		;STOP SPOOL
-   148  006a  1e08              	LD	E,8		;SPOOL/EXEC CHANNEL
-   149  006c  cda003            SHUT1:	CALL	FIND1
-   150  006f  c8                	RET	Z
-   151  0070  af                SHUT2:	XOR	A
-   152  0071  77                	LD	(HL),A
-   153  0072  2b                	DEC	HL
-   154  0073  77                	LD	(HL),A
-   155  0074  212500            	LD	HL,37
-   156  0077  19                	ADD	HL,DE
-   157  0078  cb7e              	BIT	7,(HL)
-   158  007a  23                	INC	HL
-   159  007b  c41903            	CALL	NZ,WRITE
-   160  007e  21a600            	LD	HL,FCBSIZ
-   161  0081  19                	ADD	HL,DE
-   162  0082  ed4b0000          	LD	BC,(FREE)
-   163  0086  ed42              	SBC	HL,BC
-   164  0088  20aa              	JR	NZ,CLOSE
-   165  008a  ed530000          	LD	(FREE),DE	;RELEASE SPACE
-   166  008e  18a4              	JR	CLOSE
-   167                          ;
-   168                          ;TYPE - *TYPE command.
-   169                          ;Types file to console output.
-   170                          ;
-   171  0090  37                TYPE:	SCF			;*TYPE
-   172  0091  cdd301            	CALL	OSOPEN
-   173  0094  b7                	OR	A
-   174  0095  2830              	JR	Z,NOTFND
-   175  0097  5f                	LD	E,A
-   176  0098  3a1809            TYPE1:	LD	A,(FLAGS)	;TEST
-   177  009b  cb7f              	BIT	7,A		;FOR
-   178  009d  200a              	JR	NZ,TYPESC	;ESCape
-   179  009f  cd3f02            	CALL	OSBGET
-   180  00a2  cd7608            	CALL	OSWRCH		;N.B. CALLS "TEST"
-   181  00a5  30f1              	JR	NC,TYPE1
-   182  00a7  18a3              	JR	OSSHUT
-   183                          ;
-   184  00a9  cd4c00            TYPESC:	CALL	OSSHUT		;CLOSE!
-   185  00ac  c3f607            	JP	ABORT
-   186                          ;
-   187                          ;OSLOAD - Load an area of memory from a file.
-   188                          ;   Inputs: HL addresses filename (term CR)
-   189                          ;           DE = address at which to load
-   190                          ;           BC = maximum allowed size (bytes)
-   191                          ;  Outputs: Carry reset indicates no room for file.
-   192                          ; Destroys: A,B,C,D,E,H,L,F
+   130  0053  00                	DEFB	0
+   131                          ;
+   132                          ;OSSHUT - Close disk file(s).
+   133                          ;   Inputs: E = file channel
+   134                          ;           If E=0 all files are closed (except SPOOL)
+   135                          ; Destroys: A,B,C,D,E,H,L,F
+   136                          ;
+   137  0054  7b                OSSHUT:	LD	A,E
+   138  0055  b7                	OR	A
+   139  0056  200b              	JR	NZ,SHUTIT
+   140  0058  1c                SHUT0:	INC	E
+   141  0059  cb5b              	BIT	3,E
+   142  005b  c0                	RET	NZ
+   143  005c  d5                	PUSH	DE
+   144  005d  cd7400            	CALL	SHUT1
+   145  0060  d1                	POP	DE
+   146  0061  18f5              	JR	SHUT0
+   147                          ;
+   148  0063  cd4404            SHUTIT:	CALL	FIND1
+   149  0066  2010              	JR	NZ,SHUT2
+   150  0068  c32f04            	JP	CHANER
+   151                          ;
+   152  006b  21bc09            SESHUT:	LD	HL,FLAGS
+   153  006e  cb86              	RES	0,(HL)		;STOP EXEC
+   154  0070  cb8e              	RES	1,(HL)		;STOP SPOOL
+   155  0072  1e08              	LD	E,8		;SPOOL/EXEC CHANNEL
+   156  0074  cd4404            SHUT1:	CALL	FIND1
+   157  0077  c8                	RET	Z
+   158  0078  af                SHUT2:	XOR	A
+   159  0079  77                	LD	(HL),A
+   160  007a  2b                	DEC	HL
+   161  007b  77                	LD	(HL),A
+   162  007c  212500            	LD	HL,37
+   163  007f  19                	ADD	HL,DE
+   164  0080  cb7e              	BIT	7,(HL)
+   165  0082  23                	INC	HL
+   166  0083  c4bd03            	CALL	NZ,WRITE
+   167  0086  21a600            	LD	HL,FCBSIZ
+   168  0089  19                	ADD	HL,DE
+   169  008a  ed4b0000          	LD	BC,(FREE)
+   170  008e  ed42              	SBC	HL,BC
+   171  0090  20aa              	JR	NZ,CLOSE
+   172  0092  ed530000          	LD	(FREE),DE	;RELEASE SPACE
+   173  0096  18a4              	JR	CLOSE
+   174                          ;
+   175                          ;TYPE - *TYPE command.
+   176                          ;Types file to console output.
+   177                          ;
+   178  0098  37                TYPE:	SCF			;*TYPE
+   179  0099  cd7702            	CALL	OSOPEN
+   180  009c  b7                	OR	A
+   181  009d  2830              	JR	Z,NOTFND
+   182  009f  5f                	LD	E,A
+   183  00a0  3abc09            TYPE1:	LD	A,(FLAGS)	;TEST
+   184  00a3  cb7f              	BIT	7,A		;FOR
+   185  00a5  200a              	JR	NZ,TYPESC	;ESCape
+   186  00a7  cde302            	CALL	OSBGET
+   187  00aa  cd1a09            	CALL	OSWRCH		;N.B. CALLS "TEST"
+   188  00ad  30f1              	JR	NC,TYPE1
+   189  00af  18a3              	JR	OSSHUT
+   190                          ;
+   191  00b1  cd5400            TYPESC:	CALL	OSSHUT		;CLOSE!
+   192  00b4  c39a08            	JP	ABORT
    193                          ;
-   194  00af  cdd805            STLOAD:	CALL	SAVLOD		;*LOAD
-   195  00b2  e5                	PUSH	HL
-   196  00b3  180c              	JR	OSL1
-   197                          ;
-   198  00b5  3a0000            OSLOAD:	LD	A,(DOS_VER)
-   199  00b8  fe02              	CP	2
-   200  00ba  d2f200            	JP	NC,OSLOAD_DOS2
-   201  00bd  c5                OSLOAD_CPM:	PUSH	BC		;LOAD
-   202  00be  cd3404            	CALL	SETUP0
-   203  00c1  eb                OSL1:	EX	DE,HL
-   204  00c2  cd3d03            	CALL	OPEN
-   205  00c5  201d              	JR	NZ,LOAD0
-   206  00c7  3ed6              NOTFND:	LD	A,214
-   207  00c9  cd0000            	CALL	EXTERR
-   208  00cc  46696c65206e6f74  	DEFM	"File not found"
+   194                          ;OSLOAD - Load an area of memory from a file.
+   195                          ;   Inputs: HL addresses filename (term CR)
+   196                          ;           DE = address at which to load
+   197                          ;           BC = maximum allowed size (bytes)
+   198                          ;  Outputs: Carry reset indicates no room for file.
+   199                          ; Destroys: A,B,C,D,E,H,L,F
+   200                          ;
+   201  00b7  cd7c06            STLOAD:	CALL	SAVLOD		;*LOAD
+   202  00ba  e5                	PUSH	HL
+   203  00bb  180c              	JR	OSL1
+   204                          ;
+   205                          OSLOAD:
+   206  00bd  3a0000            	LD	A,(DOS_VER)
+   207  00c0  fe02              	CP	2
+   208  00c2  d2fa00            	JP	NC,OSLOAD_DOS2
+   209  00c5  c5                OSLOAD_CPM:	PUSH	BC		;LOAD
+   210  00c6  cdd804            	CALL	SETUP0
+   211  00c9  eb                OSL1:	EX	DE,HL
+   212  00ca  cde103            	CALL	OPEN
+   213  00cd  201d              	JR	NZ,LOAD0
+   214  00cf  3ed6              NOTFND:	LD	A,214
+   215  00d1  cd0000            	CALL	EXTERR
+   216  00d4  46696c65206e6f74  	DEFM	"File not found"
               20666f756e64      
-   209  00da  00                	DEFB	0
-   210  00db  cde802            LOAD:	CALL	READ
-   211  00de  200a              	JR	NZ,LOAD1
-   212  00e0  cd3203            	CALL	INCSEC
-   213  00e3  09                	ADD	HL,BC
-   214  00e4  e3                LOAD0:	EX	(SP),HL
-   215  00e5  ed42              	SBC	HL,BC
-   216  00e7  e3                	EX	(SP),HL
-   217  00e8  30f1              	JR	NC,LOAD
-   218  00ea  c1                LOAD1:	POP	BC
-   219  00eb  f5                	PUSH	AF
-   220  00ec  cd3400            	CALL	CLOSE
-   221  00ef  f1                	POP	AF
-   222  00f0  3f                	CCF
-   223  00f1  c9                OSCALL:	RET
-   224                          
-   225                          ;OSLOAD_DOS2 - Load through an MSX-DOS2 file handle.
-   226                          ; _READ returns the actual byte count in HL.
-   227                          ; Each read is limited to 512 bytes.
-   228                          ;
-   229                          OSLOAD_DOS2:
-   230  00f2  ed530000          	LD	(FILE_BUFADRS),DE
-   231  00f6  ed430000          	LD	(FILE_MAXSIZE),BC
-   232  00fa  cd3404            	CALL	SETUP0
-   233  00fd  cde403            	CALL	PATHNORM
-   234  0100  cd0704            	CALL	DOS2_DEFAULT_EXT
-   235                          
-   236  0103  110000            	LD	DE,PATHBUF
-   237  0106  3e01              	LD	A,1			; read-only
-   238  0108  cd8e01            	CALL	HOPEN
-   239  010b  b7                	OR	A
-   240  010c  c25c01            	JP	NZ,LOAD_DOS2_NOTFOUND
-   241                          
-   242                          LOAD_DOS2_LOOP:
-   243  010f  2a0000            	LD	HL,(FILE_MAXSIZE)
-   244  0112  7c                	LD	A,H
-   245  0113  b5                	OR	L
-   246  0114  2841              	JR	Z,LOAD_DOS2_CLOSE_OK
-   247                          
-   248  0116  110001            	LD	DE,BLOCKSIZE
-   249  0119  b7                	OR	A
-   250  011a  ed52              	SBC	HL,DE
-   251  011c  3006              	JR	NC,LOAD_DOS2_FULL_BLOCK
-   252  011e  19                	ADD	HL,DE
-   253  011f  220000            	LD	(REQ_BYTES),HL
-   254  0122  1806              	JR	LOAD_DOS2_HAVE_REQUEST
+   217  00e2  00                	DEFB	0
+   218  00e3  cd8c03            LOAD:	CALL	READ
+   219  00e6  200a              	JR	NZ,LOAD1
+   220  00e8  cdd603            	CALL	INCSEC
+   221  00eb  09                	ADD	HL,BC
+   222  00ec  e3                LOAD0:	EX	(SP),HL
+   223  00ed  ed42              	SBC	HL,BC
+   224  00ef  e3                	EX	(SP),HL
+   225  00f0  30f1              	JR	NC,LOAD
+   226  00f2  c1                LOAD1:	POP	BC
+   227  00f3  f5                	PUSH	AF
+   228  00f4  cd3c00            	CALL	CLOSE
+   229  00f7  f1                	POP	AF
+   230  00f8  3f                	CCF
+   231  00f9  c9                OSCALL:	RET
+   232                          
+   233                          ;OSLOAD_DOS2 - Load through an MSX-DOS2 file handle.
+   234                          ; _READ returns the actual byte count in HL.
+   235                          ; Each read is limited to 512 bytes.
+   236                          ;
+   237                          OSLOAD_DOS2:
+   238  00fa  ed530000          	LD	(FILE_BUFADRS),DE
+   239  00fe  ed430000          	LD	(FILE_MAXSIZE),BC
+   240  0102  cdd804            	CALL	SETUP0
+   241  0105  cd8804            	CALL	PATHNORM
+   242  0108  cdab04            	CALL	DOS2_DEFAULT_EXT
+   243                          
+   244  010b  110000            	LD	DE,PATHBUF
+   245  010e  3e01              	LD	A,1			; read-only
+   246  0110  cd1102            	CALL	HOPEN
+   247  0113  b7                	OR	A
+   248  0114  c25f01            	JP	NZ,FILE_DOS2_NOTFOUND
+   249                          
+   250                          LOAD_DOS2_LOOP:
+   251  0117  2a0000            	LD	HL,(FILE_MAXSIZE)
+   252  011a  7c                	LD	A,H
+   253  011b  b5                	OR	L
+   254  011c  283c              	JR	Z,FILE_DOS2_CLOSE_OK
    255                          
-   256                          LOAD_DOS2_FULL_BLOCK:
-   257  0124  210001            	LD	HL,BLOCKSIZE
-   258  0127  220000            	LD	(REQ_BYTES),HL
-   259                          
-   260                          LOAD_DOS2_HAVE_REQUEST:
-   261  012a  ed5b0000          	LD	DE,(FILE_BUFADRS)
-   262  012e  2a0000            	LD	HL,(REQ_BYTES)
-   263  0131  cda501            	CALL	HREAD
-   264  0134  b7                	OR	A
-   265  0135  2039              	JR	NZ,LOAD_DOS2_ERROR
-   266  0137  7c                	LD	A,H
-   267  0138  b5                	OR	L
-   268  0139  281c              	JR	Z,LOAD_DOS2_CLOSE_OK
-   269                          
-   270  013b  ed530000          	LD	(FILE_BUFADRS),DE
-   271  013f  eb                	EX	DE,HL
-   272  0140  2a0000            	LD	HL,(FILE_MAXSIZE)
-   273  0143  b7                	OR	A
-   274  0144  ed52              	SBC	HL,DE
-   275  0146  3828              	JR	C,LOAD_DOS2_ERROR
-   276  0148  220000            	LD	(FILE_MAXSIZE),HL
-   277                          
-   278  014b  2a0000            	LD	HL,(REQ_BYTES)
-   279  014e  b7                	OR	A
-   280  014f  ed52              	SBC	HL,DE
-   281  0151  381d              	JR	C,LOAD_DOS2_ERROR
-   282  0153  28ba              	JR	Z,LOAD_DOS2_LOOP
-   283  0155  1800              	JR	LOAD_DOS2_CLOSE_OK	; short read means EOF
+   256  011e  110001            	LD	DE,BLOCKSIZE
+   257  0121  b7                	OR	A
+   258  0122  ed52              	SBC	HL,DE
+   259  0124  3003              	JR	NC,LOAD_DOS2_FULL_BLOCK
+   260  0126  19                	ADD	HL,DE
+   261  0127  1803              	JR	LOAD_DOS2_HAVE_REQUEST
+   262                          
+   263                          LOAD_DOS2_FULL_BLOCK:
+   264  0129  210001            	LD	HL,BLOCKSIZE
+   265                          LOAD_DOS2_HAVE_REQUEST:
+   266  012c  220000            	LD	(REQ_BYTES),HL
+   267                          
+   268  012f  ed5b0000          	LD	DE,(FILE_BUFADRS)
+   269  0133  2a0000            	LD	HL,(REQ_BYTES)
+   270  0136  cd3702            	CALL	HREAD
+   271  0139  b7                	OR	A
+   272  013a  2052              	JR	NZ,FILE_DOS2_ERROR
+   273  013c  7c                	LD	A,H
+   274  013d  b5                	OR	L
+   275  013e  281a              	JR	Z,FILE_DOS2_CLOSE_OK
+   276                          
+   277  0140  ed530000          	LD	(FILE_BUFADRS),DE
+   278  0144  eb                	EX	DE,HL
+   279  0145  2a0000            	LD	HL,(FILE_MAXSIZE)
+   280  0148  b7                	OR	A
+   281  0149  ed52              	SBC	HL,DE
+   282  014b  3841              	JR	C,FILE_DOS2_ERROR
+   283  014d  220000            	LD	(FILE_MAXSIZE),HL
    284                          
-   285                          LOAD_DOS2_CLOSE_OK:
-   286  0157  cd9b01            	CALL	HCLOSE
-   287  015a  37                	SCF
-   288  015b  c9                	RET
-   289                          
-   290                          LOAD_DOS2_NOTFOUND:
-   291  015c  3ed6              	LD	A,214
-   292  015e  cd0000            	CALL	EXTERR
-   293  0161  46696c65206e6f74  	DEFM	"File not found"
+   285  0150  2a0000            	LD	HL,(REQ_BYTES)
+   286  0153  b7                	OR	A
+   287  0154  ed52              	SBC	HL,DE
+   288  0156  3836              	JR	C,FILE_DOS2_ERROR
+   289  0158  28bd              	JR	Z,LOAD_DOS2_LOOP
+   290                          FILE_DOS2_CLOSE_OK:
+   291  015a  cd2d02            	CALL	HCLOSE
+   292  015d  37                	SCF
+   293  015e  c9                	RET
+   294                          
+   295                          FILE_DOS2_NOTFOUND:
+   296  015f  3ed6              	LD	A,214
+   297  0161  cd0000            	CALL	EXTERR
+   298  0164  46696c65206e6f74  	DEFM	"File not found"
               20666f756e64      
-   294  016f  00                	DEFB	0
-   295                          
-   296                          LOAD_DOS2_ERROR:
-   297  0170  f5                	PUSH	AF
-   298  0171  cd9b01            	CALL	HCLOSE
-   299  0174  f1                	POP	AF
-   300  0175  3eff              	LD	A,255
-   301  0177  cd0000            	CALL	EXTERR
-   302  017a  4d53582d444f5332  	DEFM	"MSX-DOS2 file error"
+   299  0172  00                	DEFB	0
+   300                          
+   301                          FILE_DOS2_CREATE_ERROR:
+   302  0173  3eff              	LD	A,255
+   303  0175  cd0000            	CALL	EXTERR
+   304  0178  4d53582d444f5332  	DEFM	"MSX-DOS2 create error"
+              2063726561746520  
+              6572726f72        
+   305  018d  00                	DEFB	0
+   306                          
+   307                          FILE_DOS2_ERROR:
+   308  018e  f5                	PUSH	AF
+   309  018f  cd2d02            	CALL	HCLOSE
+   310  0192  f1                	POP	AF
+   311  0193  3eff              	LD	A,255
+   312  0195  cd0000            	CALL	EXTERR
+   313  0198  4d53582d444f5332  	DEFM	"MSX-DOS2 file error"
               2066696c65206572  
               726f72            
-   303  018d  00                	DEFB	0
-   304                          
-   305                          ; HOPEN - Open an MSX-DOS2 file.
-   306                          ;   Inputs: DE = ASCIIZ filename, A = access mode
-   307                          ;  Outputs: A = error code (0 on success), FILE_HANDLE = file handle
-   308                          ; Destroys: A,C,DE,HL,F
-   309                          HOPEN:
-   310  018e  0e43              	LD	C,43H			; _OPEN
-   311  0190  cd0500            	CALL	BDOS
-   312  0193  b7                	OR	A
-   313  0194  c0                	RET	NZ
-   314  0195  78                	LD	A,B
-   315  0196  320000            	LD	(FILE_HANDLE),A
-   316  0199  af                	XOR	A
-   317  019a  c9                	RET
-   318                          
-   319                          ; HCLOSE - Close an MSX-DOS2 file handle.
-   320                          ;   Inputs: FILE_HANDLE = file handle
-   321                          ;  Outputs: A = error code (0 on success)
-   322                          ; Destroys: A,BC,DE,HL,F
-   323                          HCLOSE:
-   324  019b  3a0000            	LD	A,(FILE_HANDLE)
-   325  019e  47                	LD	B,A
-   326  019f  0e45              	LD	C,45H			; _CLOSE
-   327  01a1  cd0500            	CALL	BDOS
-   328  01a4  c9                	RET
-   329                          
-   330                          ; HREAD - Read bytes through an MSX-DOS2 file handle.
-   331                          ;   Inputs: FILE_HANDLE = file handle, DE = destination buffer,
-   332                          ;           HL = requested bytes
-   333                          ;  Outputs: A = error code (0 on success), DE = next buffer address,
-   334                          ;           HL = actual bytes read returned by _READ
-   335                          ; Destroys: A,BC,F
-   336                          HREAD:
-   337  01a5  ed530000          	LD	(FILE_BUFADRS),DE
-   338  01a9  220000            	LD	(REQ_BYTES),HL
-   339  01ac  3a0000            	LD	A,(FILE_HANDLE)
-   340  01af  47                	LD	B,A
-   341  01b0  ed5b0000          	LD	DE,(FILE_BUFADRS)
-   342  01b4  2a0000            	LD	HL,(REQ_BYTES)
-   343  01b7  0e48              	LD	C,48H			; _READ
-   344  01b9  cd0500            	CALL	BDOS
-   345  01bc  b7                	OR	A
-   346  01bd  c0                	RET	NZ
-   347  01be  ed5b0000          	LD	DE,(FILE_BUFADRS)
-   348  01c2  e5                	PUSH	HL
-   349  01c3  19                	ADD	HL,DE
-   350  01c4  eb                	EX	DE,HL
-   351  01c5  e1                	POP	HL
-   352  01c6  c9                	RET
-   353                          
-   354                          ;OSOPEN - Open a file for reading or writing.
-   355                          ;   Inputs: HL addresses filename (term CR)
-   356                          ;           Carry set for OPENIN, cleared for OPENOUT.
-   357                          ;   Outputs: A = file channel (=0 if cannot open)
-   358                          ;            DE = file FCB
-   359                          ;   Destroys: A,B,C,D,E,H,L,F
-   360                          ;
-   361  01c7  f5                OPENIT:	PUSH	AF		;SAVE CARRY
-   362  01c8  cd3404            	CALL	SETUP0
-   363  01cb  f1                	POP	AF
-   364  01cc  d44703            	CALL	NC,CREATE
-   365  01cf  dc3d03            	CALL	C,OPEN
-   366  01d2  c9                	RET
-   367                          ;
-   368  01d3  cdc701            OSOPEN:	CALL	OPENIT
-   369  01d6  c8                	RET	Z		;ERROR
-   370  01d7  0607              	LD	B,7		;MAX. NUMBER OF FILES
-   371  01d9  211709            	LD	HL,TABLE+15
-   372  01dc  7e                OPEN1:	LD	A,(HL)
-   373  01dd  2b                	DEC	HL
-   374  01de  b6                	OR	(HL)
-   375  01df  281c              	JR	Z,OPEN2		;FREE CHANNEL
-   376  01e1  2b                	DEC	HL
-   377  01e2  10f8              	DJNZ	OPEN1
-   378  01e4  3ec0              	LD	A,192
-   379  01e6  cd0000            	CALL	EXTERR
-   380  01e9  546f6f206d616e79  	DEFM	"Too many open files"
+   314  01ab  00                	DEFB	0
+   315                          
+   316                          ;
+   317                          ;OSSAVE_DOS2 - Save through an MSX-DOS2 file handle.
+   318                          ; _WRITE returns the actual byte count in HL.
+   319                          ; Each write is limited to 512 bytes.
+   320                          ;  DE=FILE BUFFER
+   321                          ;  BC=FILE SIZE (bytes)
+   322                          OSSAVE_DOS2:
+   323  01ac  ed530000          	LD	(FILE_BUFADRS),DE
+   324  01b0  ed430000          	LD	(FILE_MAXSIZE),BC
+   325  01b4  cdd804            	CALL	SETUP0
+   326  01b7  cd8804            	CALL	PATHNORM
+   327  01ba  cdab04            	CALL	DOS2_DEFAULT_EXT
+   328                          
+   329  01bd  110000            	LD	DE,PATHBUF
+   330  01c0  cd1e02            	CALL	HCREATE
+   331  01c3  b7                	OR	A
+   332  01c4  c27301            	JP	NZ,FILE_DOS2_CREATE_ERROR
+   333                          SAVE_DOS2_LOOP:
+   334  01c7  2a0000            	LD	HL,(FILE_MAXSIZE)   ;FILE remaining size
+   335  01ca  7c                	LD	A,H
+   336  01cb  b5                	OR	L
+   337  01cc  288c              	JR	Z,FILE_DOS2_CLOSE_OK
+   338                          
+   339  01ce  110001            	LD	DE,BLOCKSIZE
+   340  01d1  b7                	OR	A
+   341  01d2  ed52              	SBC	HL,DE
+   342  01d4  3003              	JR	NC,SAVE_DOS2_FULL_BLOCK	; BLOCK SIZE WRITE
+   343  01d6  19                	ADD	HL,DE
+   344  01d7  1803              	JR	SAVE_DOS2_SIZE; short block write
+   345                          
+   346                          SAVE_DOS2_FULL_BLOCK:
+   347  01d9  210001            	LD	HL,BLOCKSIZE	; full block write
+   348                          
+   349                          SAVE_DOS2_SIZE:
+   350  01dc  220000            	LD	(REQ_BYTES),HL
+   351  01df  ed5b0000          	LD	DE,(FILE_BUFADRS)
+   352  01e3  2a0000            	LD	HL,(REQ_BYTES)
+   353  01e6  cd5902            	CALL	HWRITE
+   354  01e9  b7                	OR	A
+   355  01ea  c28e01            	JP	NZ,FILE_DOS2_ERROR
+   356  01ed  7c                	LD	A,H
+   357  01ee  b5                	OR	L
+   358  01ef  ca5a01            	JP	Z,FILE_DOS2_CLOSE_OK
+   359                          
+   360  01f2  ed530000          	LD	(FILE_BUFADRS),DE
+   361  01f6  eb                	EX	DE,HL
+   362  01f7  2a0000            	LD	HL,(FILE_MAXSIZE)
+   363  01fa  b7                	OR	A
+   364  01fb  ed52              	SBC	HL,DE
+   365  01fd  da8e01            	JP	C,FILE_DOS2_ERROR
+   366  0200  220000            	LD	(FILE_MAXSIZE),HL
+   367                          
+   368  0203  2a0000            	LD	HL,(REQ_BYTES)
+   369  0206  b7                	OR	A
+   370  0207  ed52              	SBC	HL,DE
+   371  0209  da8e01            	JP	C,FILE_DOS2_ERROR	;
+   372  020c  28b9              	JR	Z,SAVE_DOS2_LOOP
+   373  020e  c35a01            	JP	FILE_DOS2_CLOSE_OK	; short read means EOF
+   374                          
+   375                          
+   376                          ; HOPEN - Open an MSX-DOS2 file.
+   377                          ;   Inputs: DE = ASCIIZ filename, A = access mode
+   378                          ;  Outputs: A = error code (0 on success), FILE_HANDLE = file handle
+   379                          ; Destroys: A,C,DE,HL,F
+   380                          HOPEN:
+   381  0211  0e43              	LD	C,43H			; _OPEN
+   382  0213  cd0500            	CALL	BDOS
+   383  0216  b7                	OR	A
+   384  0217  c0                	RET	NZ
+   385  0218  78                	LD	A,B
+   386  0219  320000            	LD	(FILE_HANDLE),A
+   387  021c  af                	XOR	A
+   388  021d  c9                	RET
+   389                          
+   390                          ; HCREATE - Create/truncate an MSX-DOS2 file.
+   391                          ;   Inputs: DE = ASCIIZ filename
+   392                          ;  Outputs: A = error code (0 on success), FILE_HANDLE = file handle
+   393                          ;  Destroys: A,B,C,DE,HL,F
+   394                          HCREATE:
+   395  021e  0600              	LD	B,0			; normal file attribute
+   396  0220  0e44              	LD	C,44H			; _CREATE
+   397  0222  cd0500            	CALL	BDOS
+   398  0225  b7                	OR	A
+   399  0226  c0                	RET	NZ
+   400  0227  78                	LD	A,B
+   401  0228  320000            	LD	(FILE_HANDLE),A
+   402  022b  af                	XOR	A
+   403  022c  c9                	RET
+   404                          
+   405                          ; HCLOSE - Close an MSX-DOS2 file handle.
+   406                          ;   Inputs: FILE_HANDLE = file handle
+   407                          ;  Outputs: A = error code (0 on success)
+   408                          ; Destroys: A,BC,DE,HL,F
+   409                          HCLOSE:
+   410  022d  3a0000            	LD	A,(FILE_HANDLE)
+   411  0230  47                	LD	B,A
+   412  0231  0e45              	LD	C,45H			; _CLOSE
+   413  0233  cd0500            	CALL	BDOS
+   414  0236  c9                	RET
+   415                          
+   416                          ; HREAD - Read bytes through an MSX-DOS2 file handle.
+   417                          ;   Inputs: FILE_HANDLE = file handle, DE = destination buffer,
+   418                          ;           HL = requested bytes
+   419                          ;  Outputs: A = error code (0 on success), DE = next buffer address,
+   420                          ;           HL = actual bytes read returned by _READ
+   421                          ; Destroys: A,BC,F
+   422                          HREAD:
+   423  0237  ed530000          	LD	(FILE_BUFADRS),DE
+   424  023b  220000            	LD	(REQ_BYTES),HL
+   425  023e  3a0000            	LD	A,(FILE_HANDLE)
+   426  0241  47                	LD	B,A
+   427  0242  ed5b0000          	LD	DE,(FILE_BUFADRS)
+   428  0246  2a0000            	LD	HL,(REQ_BYTES)
+   429  0249  0e48              	LD	C,48H			; _READ
+   430  024b  cd0500            	CALL	BDOS
+   431  024e  b7                	OR	A
+   432  024f  c0                	RET	NZ
+   433  0250  ed5b0000          	LD	DE,(FILE_BUFADRS)
+   434  0254  e5                	PUSH	HL
+   435  0255  19                	ADD	HL,DE
+   436  0256  eb                	EX	DE,HL
+   437  0257  e1                	POP	HL
+   438  0258  c9                	RET
+   439                          ;
+   440                          ; HWRITE - Write bytes through an MSX-DOS2 file handle.
+   441                          ;   Inputs: FILE_HANDLE = file handle,
+   442                          ;           DE = source buffer,
+   443                          ;           HL = requested bytes
+   444                          ;  Outputs: A = error code (0 on success),
+   445                          ;           DE = next buffer address,
+   446                          ;           HL = actual bytes written returned by _WRITE
+   447                          ; Destroys: A,BC,F
+   448                          HWRITE:
+   449  0259  3a0000            	LD	A,(FILE_HANDLE)
+   450  025c  47                	LD	B,A
+   451  025d  0e49              	LD	C,49H			; _WRITE
+   452  025f  d5                	PUSH DE
+   453  0260  cd0500            	CALL	BDOS
+   454  0263  d1                	POP DE
+   455  0264  b7                	OR	A
+   456  0265  c0                	RET	NZ
+   457  0266  e5                	PUSH	HL
+   458  0267  19                	ADD	HL,DE
+   459  0268  eb                	EX	DE,HL
+   460  0269  e1                	POP	HL
+   461  026a  c9                	RET
+   462                          
+   463                          ;OSOPEN - Open a file for reading or writing.
+   464                          ;   Inputs: HL addresses filename (term CR)
+   465                          ;           Carry set for OPENIN, cleared for OPENOUT.
+   466                          ;   Outputs: A = file channel (=0 if cannot open)
+   467                          ;            DE = file FCB
+   468                          ;   Destroys: A,B,C,D,E,H,L,F
+   469                          ;
+   470  026b  f5                OPENIT:	PUSH	AF		;SAVE CARRY
+   471  026c  cdd804            	CALL	SETUP0
+   472  026f  f1                	POP	AF
+   473  0270  d4eb03            	CALL	NC,CREATE
+   474  0273  dce103            	CALL	C,OPEN
+   475  0276  c9                	RET
+   476                          ;
+   477  0277  cd6b02            OSOPEN:	CALL	OPENIT
+   478  027a  c8                	RET	Z		;ERROR
+   479  027b  0607              	LD	B,7		;MAX. NUMBER OF FILES
+   480  027d  21bb09            	LD	HL,TABLE+15
+   481  0280  7e                OPEN1:	LD	A,(HL)
+   482  0281  2b                	DEC	HL
+   483  0282  b6                	OR	(HL)
+   484  0283  281c              	JR	Z,OPEN2		;FREE CHANNEL
+   485  0285  2b                	DEC	HL
+   486  0286  10f8              	DJNZ	OPEN1
+   487  0288  3ec0              	LD	A,192
+   488  028a  cd0000            	CALL	EXTERR
+   489  028d  546f6f206d616e79  	DEFM	"Too many open files"
               206f70656e206669  
               6c6573            
-   381  01fc  00                	DEFB	0
-   382                          
-   383  01fd  ed5b0000          OPEN2:	LD	DE,(FREE)	;FREE SPACE POINTER
-   384  0201  73                	LD	(HL),E
-   385  0202  23                	INC	HL
-   386  0203  72                	LD	(HL),D
-   387  0204  78                	LD	A,B		;CHANNEL (1-7)
-   388  0205  21a600            	LD	HL,FCBSIZ
-   389  0208  19                	ADD	HL,DE		;RESERVE SPACE
-   390  0209  220000            	LD	(FREE),HL
-   391  020c  215c00            OPEN3:	LD	HL,FCB		;ENTRY FROM SPOOL/EXEC
-   392  020f  d5                	PUSH	DE
-   393  0210  012400            	LD	BC,36
-   394  0213  edb0              	LDIR			;COPY FCB
-   395  0215  eb                	EX	DE,HL
-   396  0216  23                	INC	HL
-   397  0217  71                	LD	(HL),C		;CLEAR PTR
-   398  0218  23                	INC	HL
-   399  0219  d1                	POP	DE
-   400  021a  47                	LD	B,A
-   401  021b  cdc802            	CALL	RDF		;READ OR FILL
-   402  021e  78                	LD	A,B
-   403  021f  c30000            	JP	CHECK
-   404                          ;
-   405                          ;OSBPUT - Write a byte to a random disk file.
-   406                          ;   Inputs: E = file channel
-   407                          ;           A = byte to write
-   408                          ; Destroys: A,B,C,F
-   409                          ;
-   410  0222  d5                OSBPUT:	PUSH	DE
-   411  0223  e5                	PUSH	HL
-   412  0224  47                	LD	B,A
-   413  0225  cd7f03            	CALL	FIND
-   414  0228  78                	LD	A,B
-   415  0229  0600              	LD	B,0
-   416  022b  2b                	DEC	HL
-   417  022c  70                	LD	(HL),B		;CLEAR EOF
-   418  022d  23                	INC	HL
-   419  022e  4e                	LD	C,(HL)
-   420  022f  cbb9              	RES	7,C
-   421  0231  cbfe              	SET	7,(HL)
-   422  0233  34                	INC	(HL)
-   423  0234  23                	INC	HL
-   424  0235  e5                	PUSH	HL
-   425  0236  09                	ADD	HL,BC
-   426  0237  77                	LD	(HL),A
-   427  0238  e1                	POP	HL
-   428  0239  ccc502            	CALL	Z,WRRDF		;WRITE THEN READ/FILL
-   429  023c  e1                	POP	HL
-   430  023d  d1                	POP	DE
-   431  023e  c9                	RET
-   432                          ;
-   433                          ;OSBGET - Read a byte from a random disk file.
-   434                          ;   Inputs: E = file channel
-   435                          ;  Outputs: A = byte read
-   436                          ;           Carry set if LAST BYTE of file
-   437                          ; Destroys: A,B,C,F
-   438                          ;
-   439  023f  d5                OSBGET:	PUSH	DE
-   440  0240  e5                	PUSH	HL
-   441  0241  cd7f03            	CALL	FIND
-   442  0244  4e                	LD	C,(HL)
-   443  0245  cbb9              	RES	7,C
-   444  0247  34                	INC	(HL)
-   445  0248  23                	INC	HL
-   446  0249  e5                	PUSH	HL
-   447  024a  0600              	LD	B,0
-   448  024c  09                	ADD	HL,BC
-   449  024d  46                	LD	B,(HL)
-   450  024e  e1                	POP	HL
-   451  024f  ece002            	CALL	PE,INCRDF	;INC SECTOR THEN READ
-   452  0252  ccc502            	CALL	Z,WRRDF		;WRITE THEN READ/FILL
-   453  0255  78                	LD	A,B
-   454  0256  e1                	POP	HL
-   455  0257  d1                	POP	DE
-   456  0258  c9                	RET
-   457                          ;
-   458                          ;OSSTAT - Read file status.
-   459                          ;   Inputs: E = file channel
-   460                          ;  Outputs: Z flag set - EOF
-   461                          ;           (If Z then A=0)
-   462                          ;           DE = address of file block.
-   463                          ; Destroys: A,D,E,H,L,F
-   464                          ;
-   465  0259  cd7f03            OSSTAT:	CALL	FIND
-   466  025c  2b                	DEC	HL
-   467  025d  7e                	LD	A,(HL)
-   468  025e  3c                	INC	A
-   469  025f  c9                	RET
-   470                          ;
-   471                          ;GETEXT - Find file size.
-   472                          ;   Inputs: E = file channel
-   473                          ;  Outputs: DEHL = file size (0-&800000)
-   474                          ; Destroys: A,B,C,D,E,H,L,F
-   475                          ;
-   476  0260  cd7f03            GETEXT:	CALL	FIND
-   477  0263  eb                	EX	DE,HL
-   478  0264  115c00            	LD	DE,FCB
-   479  0267  012400            	LD	BC,36
-   480  026a  d5                	PUSH	DE
-   481  026b  edb0              	LDIR			;COPY FCB
-   482  026d  eb                	EX	DE,HL
-   483  026e  e3                	EX	(SP),HL
-   484  026f  eb                	EX	DE,HL
-   485  0270  3e23              	LD	A,35
-   486  0272  cded02            	CALL	BDOS1		;COMPUTE SIZE
-   487  0275  e1                	POP	HL
-   488  0276  af                	XOR	A
-   489  0277  1806              	JR	GETPT1
-   490                          ;
-   491                          ;GETPTR - Return file pointer.
-   492                          ;   Inputs: E = file channel
-   493                          ;  Outputs: DEHL = pointer (0-&7FFFFF)
-   494                          ; Destroys: A,B,C,D,E,H,L,F
-   495                          ;
-   496  0279  cd7f03            GETPTR:	CALL	FIND
-   497  027c  7e                	LD	A,(HL)
-   498  027d  87                	ADD	A,A
-   499  027e  2b                	DEC	HL
-   500  027f  2b                GETPT1:	DEC	HL
-   501  0280  56                	LD	D,(HL)
-   502  0281  2b                	DEC	HL
-   503  0282  5e                	LD	E,(HL)
-   504  0283  2b                	DEC	HL
-   505  0284  66                	LD	H,(HL)
-   506  0285  6f                	LD	L,A
-   507  0286  cb3a              	SRL	D
-   508  0288  cb1b              	RR	E
-   509  028a  cb1c              	RR	H
-   510  028c  cb1d              	RR	L
-   511  028e  c9                	RET
-   512                          ;
-   513                          ;PUTPTR - Update file pointer.
-   514                          ;   Inputs: A = file channel
-   515                          ;           DEHL = new pointer (0-&7FFFFF)
-   516                          ; Destroys: A,B,C,D,E,H,L,F
-   517                          ;
-   518  028f  55                PUTPTR:	LD	D,L
-   519  0290  29                	ADD	HL,HL
-   520  0291  cb13              	RL	E
-   521  0293  43                	LD	B,E
-   522  0294  4c                	LD	C,H
-   523  0295  5f                	LD	E,A		;CHANNEL
-   524  0296  d5                	PUSH	DE
-   525  0297  cd7f03            	CALL	FIND
-   526  029a  f1                	POP	AF
-   527  029b  e67f              	AND	7FH
-   528  029d  cb7e              	BIT	7,(HL)		;PENDING WRITE?
-   529  029f  2802              	JR	Z,PUTPT1
-   530  02a1  f680              	OR	80H
-   531  02a3  77                PUTPT1:	LD	(HL),A
-   532  02a4  d5                	PUSH	DE
-   533  02a5  e5                	PUSH	HL
-   534  02a6  2b                	DEC	HL
-   535  02a7  2b                	DEC	HL
-   536  02a8  2b                	DEC	HL
-   537  02a9  56                	LD	D,(HL)
-   538  02aa  2b                	DEC	HL
-   539  02ab  5e                	LD	E,(HL)
-   540  02ac  eb                	EX	DE,HL
-   541  02ad  b7                	OR	A
-   542  02ae  ed42              	SBC	HL,BC
-   543  02b0  e1                	POP	HL
-   544  02b1  d1                	POP	DE
-   545  02b2  c8                	RET	Z
-   546  02b3  23                	INC	HL
-   547  02b4  b7                	OR	A
-   548  02b5  fc1903            	CALL	M,WRITE
-   549  02b8  e5                	PUSH	HL
-   550  02b9  2b                	DEC	HL
-   551  02ba  2b                	DEC	HL
-   552  02bb  2b                	DEC	HL
-   553  02bc  3600              	LD	(HL),0
-   554  02be  2b                	DEC	HL
-   555  02bf  70                	LD	(HL),B
-   556  02c0  2b                	DEC	HL
-   557  02c1  71                	LD	(HL),C		;NEW RECORD NO.
-   558  02c2  e1                	POP	HL
-   559  02c3  1803              	JR	RDF
-   560                          ;
-   561                          ;WRRDF - Write, read; if EOF fill with zeroes.
-   562                          ;RDF - Read; if EOF fill with zeroes.
-   563                          ;   Inputs: DE address FCB.
-   564                          ;           HL addresses data buffer.
-   565                          ;  Outputs: A=0, Z-flag set.
-   566                          ;           Carry set if fill done (EOF)
-   567                          ; Destroys: A,H,L,F
-   568                          ;
-   569  02c5  cd1903            WRRDF:	CALL	WRITE
-   570  02c8  cde802            RDF:	CALL	READ
-   571  02cb  2b                	DEC	HL
-   572  02cc  cbbe              	RES	7,(HL)
-   573  02ce  2b                	DEC	HL
-   574  02cf  77                	LD	(HL),A		;CLEAR EOF FLAG
-   575  02d0  c8                	RET	Z
-   576  02d1  36ff              	LD	(HL),-1		;SET EOF FLAG
-   577  02d3  23                	INC	HL
-   578  02d4  23                	INC	HL
-   579  02d5  c5                	PUSH	BC
-   580  02d6  af                	XOR	A
-   581  02d7  0680              	LD	B,128
-   582  02d9  77                FILL:	LD	(HL),A
-   583  02da  23                	INC	HL
-   584  02db  10fc              	DJNZ	FILL
-   585  02dd  c1                	POP	BC
-   586  02de  37                	SCF
-   587  02df  c9                	RET
-   588                          ;
-   589                          ;INCRDF - Increment record, read; if EOF fill.
-   590                          ;   Inputs: DE addresses FCB.
-   591                          ;           HL addresses data buffer.
-   592                          ;  Outputs: A=1, Z-flag reset.
-   593                          ;           Carry set if fill done (EOF)
-   594                          ; Destroys: A,H,L,F
-   595                          ;
-   596  02e0  cd3203            INCRDF:	CALL	INCSEC
-   597  02e3  cdc802            	CALL	RDF
-   598  02e6  3c                	INC	A
-   599  02e7  c9                	RET
-   600                          ;
-   601                          ;READ - Read a record from a disk file.
-   602                          ;   Inputs: DE addresses FCB.
-   603                          ;           HL = address to store data.
-   604                          ;  Outputs: A<>0 & Z-flag reset indicates EOF.
-   605                          ;           Carry = 0
-   606                          ; Destroys: A,F
-   607                          ;
-   608                          ;BDOS1 - CP/M BDOS call.
-   609                          ;   Inputs: A = function number
-   610                          ;          DE = parameter
-   611                          ;  Outputs: AF = result (carry=0)
-   612                          ; Destroys: A,F
-   613                          ;
-   614  02e8  cd7703            READ:	CALL	SETDMA
-   615  02eb  3e21              	LD	A,33
-   616  02ed  cd0403            BDOS1:	CALL	BDOS0
-   617  02f0  2002              	JR	NZ,CPMERR
-   618  02f2  b7                	OR	A
-   619  02f3  c9                	RET
-   620  02f4  3eff              CPMERR:	LD	A,255
-   621  02f6  cd0000            	CALL	EXTERR
-   622  02f9  43502f4d20457272  	DEFM	"CP/M Error"
+   490  02a0  00                	DEFB	0
+   491                          
+   492  02a1  ed5b0000          OPEN2:	LD	DE,(FREE)	;FREE SPACE POINTER
+   493  02a5  73                	LD	(HL),E
+   494  02a6  23                	INC	HL
+   495  02a7  72                	LD	(HL),D
+   496  02a8  78                	LD	A,B		;CHANNEL (1-7)
+   497  02a9  21a600            	LD	HL,FCBSIZ
+   498  02ac  19                	ADD	HL,DE		;RESERVE SPACE
+   499  02ad  220000            	LD	(FREE),HL
+   500  02b0  215c00            OPEN3:	LD	HL,FCB		;ENTRY FROM SPOOL/EXEC
+   501  02b3  d5                	PUSH	DE
+   502  02b4  012400            	LD	BC,36
+   503  02b7  edb0              	LDIR			;COPY FCB
+   504  02b9  eb                	EX	DE,HL
+   505  02ba  23                	INC	HL
+   506  02bb  71                	LD	(HL),C		;CLEAR PTR
+   507  02bc  23                	INC	HL
+   508  02bd  d1                	POP	DE
+   509  02be  47                	LD	B,A
+   510  02bf  cd6c03            	CALL	RDF		;READ OR FILL
+   511  02c2  78                	LD	A,B
+   512  02c3  c30000            	JP	CHECK
+   513                          ;
+   514                          ;OSBPUT - Write a byte to a random disk file.
+   515                          ;   Inputs: E = file channel
+   516                          ;           A = byte to write
+   517                          ; Destroys: A,B,C,F
+   518                          ;
+   519  02c6  d5                OSBPUT:	PUSH	DE
+   520  02c7  e5                	PUSH	HL
+   521  02c8  47                	LD	B,A
+   522  02c9  cd2304            	CALL	FIND
+   523  02cc  78                	LD	A,B
+   524  02cd  0600              	LD	B,0
+   525  02cf  2b                	DEC	HL
+   526  02d0  70                	LD	(HL),B		;CLEAR EOF
+   527  02d1  23                	INC	HL
+   528  02d2  4e                	LD	C,(HL)
+   529  02d3  cbb9              	RES	7,C
+   530  02d5  cbfe              	SET	7,(HL)
+   531  02d7  34                	INC	(HL)
+   532  02d8  23                	INC	HL
+   533  02d9  e5                	PUSH	HL
+   534  02da  09                	ADD	HL,BC
+   535  02db  77                	LD	(HL),A
+   536  02dc  e1                	POP	HL
+   537  02dd  cc6903            	CALL	Z,WRRDF		;WRITE THEN READ/FILL
+   538  02e0  e1                	POP	HL
+   539  02e1  d1                	POP	DE
+   540  02e2  c9                	RET
+   541                          ;
+   542                          ;OSBGET - Read a byte from a random disk file.
+   543                          ;   Inputs: E = file channel
+   544                          ;  Outputs: A = byte read
+   545                          ;           Carry set if LAST BYTE of file
+   546                          ; Destroys: A,B,C,F
+   547                          ;
+   548  02e3  d5                OSBGET:	PUSH	DE
+   549  02e4  e5                	PUSH	HL
+   550  02e5  cd2304            	CALL	FIND
+   551  02e8  4e                	LD	C,(HL)
+   552  02e9  cbb9              	RES	7,C
+   553  02eb  34                	INC	(HL)
+   554  02ec  23                	INC	HL
+   555  02ed  e5                	PUSH	HL
+   556  02ee  0600              	LD	B,0
+   557  02f0  09                	ADD	HL,BC
+   558  02f1  46                	LD	B,(HL)
+   559  02f2  e1                	POP	HL
+   560  02f3  ec8403            	CALL	PE,INCRDF	;INC SECTOR THEN READ
+   561  02f6  cc6903            	CALL	Z,WRRDF		;WRITE THEN READ/FILL
+   562  02f9  78                	LD	A,B
+   563  02fa  e1                	POP	HL
+   564  02fb  d1                	POP	DE
+   565  02fc  c9                	RET
+   566                          ;
+   567                          ;OSSTAT - Read file status.
+   568                          ;   Inputs: E = file channel
+   569                          ;  Outputs: Z flag set - EOF
+   570                          ;           (If Z then A=0)
+   571                          ;           DE = address of file block.
+   572                          ; Destroys: A,D,E,H,L,F
+   573                          ;
+   574  02fd  cd2304            OSSTAT:	CALL	FIND
+   575  0300  2b                	DEC	HL
+   576  0301  7e                	LD	A,(HL)
+   577  0302  3c                	INC	A
+   578  0303  c9                	RET
+   579                          ;
+   580                          ;GETEXT - Find file size.
+   581                          ;   Inputs: E = file channel
+   582                          ;  Outputs: DEHL = file size (0-&800000)
+   583                          ; Destroys: A,B,C,D,E,H,L,F
+   584                          ;
+   585  0304  cd2304            GETEXT:	CALL	FIND
+   586  0307  eb                	EX	DE,HL
+   587  0308  115c00            	LD	DE,FCB
+   588  030b  012400            	LD	BC,36
+   589  030e  d5                	PUSH	DE
+   590  030f  edb0              	LDIR			;COPY FCB
+   591  0311  eb                	EX	DE,HL
+   592  0312  e3                	EX	(SP),HL
+   593  0313  eb                	EX	DE,HL
+   594  0314  3e23              	LD	A,35
+   595  0316  cd9103            	CALL	BDOS1		;COMPUTE SIZE
+   596  0319  e1                	POP	HL
+   597  031a  af                	XOR	A
+   598  031b  1806              	JR	GETPT1
+   599                          ;
+   600                          ;GETPTR - Return file pointer.
+   601                          ;   Inputs: E = file channel
+   602                          ;  Outputs: DEHL = pointer (0-&7FFFFF)
+   603                          ; Destroys: A,B,C,D,E,H,L,F
+   604                          ;
+   605  031d  cd2304            GETPTR:	CALL	FIND
+   606  0320  7e                	LD	A,(HL)
+   607  0321  87                	ADD	A,A
+   608  0322  2b                	DEC	HL
+   609  0323  2b                GETPT1:	DEC	HL
+   610  0324  56                	LD	D,(HL)
+   611  0325  2b                	DEC	HL
+   612  0326  5e                	LD	E,(HL)
+   613  0327  2b                	DEC	HL
+   614  0328  66                	LD	H,(HL)
+   615  0329  6f                	LD	L,A
+   616  032a  cb3a              	SRL	D
+   617  032c  cb1b              	RR	E
+   618  032e  cb1c              	RR	H
+   619  0330  cb1d              	RR	L
+   620  0332  c9                	RET
+   621                          ;
+   622                          ;PUTPTR - Update file pointer.
+   623                          ;   Inputs: A = file channel
+   624                          ;           DEHL = new pointer (0-&7FFFFF)
+   625                          ; Destroys: A,B,C,D,E,H,L,F
+   626                          ;
+   627  0333  55                PUTPTR:	LD	D,L
+   628  0334  29                	ADD	HL,HL
+   629  0335  cb13              	RL	E
+   630  0337  43                	LD	B,E
+   631  0338  4c                	LD	C,H
+   632  0339  5f                	LD	E,A		;CHANNEL
+   633  033a  d5                	PUSH	DE
+   634  033b  cd2304            	CALL	FIND
+   635  033e  f1                	POP	AF
+   636  033f  e67f              	AND	7FH
+   637  0341  cb7e              	BIT	7,(HL)		;PENDING WRITE?
+   638  0343  2802              	JR	Z,PUTPT1
+   639  0345  f680              	OR	80H
+   640  0347  77                PUTPT1:	LD	(HL),A
+   641  0348  d5                	PUSH	DE
+   642  0349  e5                	PUSH	HL
+   643  034a  2b                	DEC	HL
+   644  034b  2b                	DEC	HL
+   645  034c  2b                	DEC	HL
+   646  034d  56                	LD	D,(HL)
+   647  034e  2b                	DEC	HL
+   648  034f  5e                	LD	E,(HL)
+   649  0350  eb                	EX	DE,HL
+   650  0351  b7                	OR	A
+   651  0352  ed42              	SBC	HL,BC
+   652  0354  e1                	POP	HL
+   653  0355  d1                	POP	DE
+   654  0356  c8                	RET	Z
+   655  0357  23                	INC	HL
+   656  0358  b7                	OR	A
+   657  0359  fcbd03            	CALL	M,WRITE
+   658  035c  e5                	PUSH	HL
+   659  035d  2b                	DEC	HL
+   660  035e  2b                	DEC	HL
+   661  035f  2b                	DEC	HL
+   662  0360  3600              	LD	(HL),0
+   663  0362  2b                	DEC	HL
+   664  0363  70                	LD	(HL),B
+   665  0364  2b                	DEC	HL
+   666  0365  71                	LD	(HL),C		;NEW RECORD NO.
+   667  0366  e1                	POP	HL
+   668  0367  1803              	JR	RDF
+   669                          ;
+   670                          ;WRRDF - Write, read; if EOF fill with zeroes.
+   671                          ;RDF - Read; if EOF fill with zeroes.
+   672                          ;   Inputs: DE address FCB.
+   673                          ;           HL addresses data buffer.
+   674                          ;  Outputs: A=0, Z-flag set.
+   675                          ;           Carry set if fill done (EOF)
+   676                          ; Destroys: A,H,L,F
+   677                          ;
+   678  0369  cdbd03            WRRDF:	CALL	WRITE
+   679  036c  cd8c03            RDF:	CALL	READ
+   680  036f  2b                	DEC	HL
+   681  0370  cbbe              	RES	7,(HL)
+   682  0372  2b                	DEC	HL
+   683  0373  77                	LD	(HL),A		;CLEAR EOF FLAG
+   684  0374  c8                	RET	Z
+   685  0375  36ff              	LD	(HL),-1		;SET EOF FLAG
+   686  0377  23                	INC	HL
+   687  0378  23                	INC	HL
+   688  0379  c5                	PUSH	BC
+   689  037a  af                	XOR	A
+   690  037b  0680              	LD	B,128
+   691  037d  77                FILL:	LD	(HL),A
+   692  037e  23                	INC	HL
+   693  037f  10fc              	DJNZ	FILL
+   694  0381  c1                	POP	BC
+   695  0382  37                	SCF
+   696  0383  c9                	RET
+   697                          ;
+   698                          ;INCRDF - Increment record, read; if EOF fill.
+   699                          ;   Inputs: DE addresses FCB.
+   700                          ;           HL addresses data buffer.
+   701                          ;  Outputs: A=1, Z-flag reset.
+   702                          ;           Carry set if fill done (EOF)
+   703                          ; Destroys: A,H,L,F
+   704                          ;
+   705  0384  cdd603            INCRDF:	CALL	INCSEC
+   706  0387  cd6c03            	CALL	RDF
+   707  038a  3c                	INC	A
+   708  038b  c9                	RET
+   709                          ;
+   710                          ;READ - Read a record from a disk file.
+   711                          ;   Inputs: DE addresses FCB.
+   712                          ;           HL = address to store data.
+   713                          ;  Outputs: A<>0 & Z-flag reset indicates EOF.
+   714                          ;           Carry = 0
+   715                          ; Destroys: A,F
+   716                          ;
+   717                          ;BDOS1 - CP/M BDOS call.
+   718                          ;   Inputs: A = function number
+   719                          ;          DE = parameter
+   720                          ;  Outputs: AF = result (carry=0)
+   721                          ; Destroys: A,F
+   722                          ;
+   723  038c  cd1b04            READ:	CALL	SETDMA
+   724  038f  3e21              	LD	A,33
+   725  0391  cda803            BDOS1:	CALL	BDOS0
+   726  0394  2002              	JR	NZ,CPMERR
+   727  0396  b7                	OR	A
+   728  0397  c9                	RET
+   729  0398  3eff              CPMERR:	LD	A,255
+   730  039a  cd0000            	CALL	EXTERR
+   731  039d  43502f4d20457272  	DEFM	"CP/M Error"
               6f72              
-   623  0303  00                	DEFB	0
-   624                          ;
-   625  0304  c5                BDOS0:	PUSH	BC
-   626  0305  d5                	PUSH	DE
-   627  0306  e5                	PUSH	HL
-   628  0307  dde5              	PUSH	IX
-   629  0309  fde5              	PUSH	IY
-   630  030b  4f                	LD	C,A
-   631  030c  cd0500            	CALL	BDOS
-   632  030f  24                	INC	H
-   633  0310  25                	DEC	H
-   634  0311  fde1              	POP	IY
-   635  0313  dde1              	POP	IX
-   636  0315  e1                	POP	HL
-   637  0316  d1                	POP	DE
-   638  0317  c1                	POP	BC
-   639  0318  c9                	RET
-   640                          ;
-   641                          ;WRITE - Write a record to a disk file.
-   642                          ;   Inputs: DE addresses FCB.
-   643                          ;           HL = address to get data.
-   644                          ; Destroys: A,F
-   645                          ;
-   646  0319  cd7703            WRITE:	CALL	SETDMA
-   647  031c  3e28              	LD	A,40
-   648  031e  cded02            	CALL	BDOS1
-   649  0321  280f              	JR	Z,INCSEC
-   650  0323  3ec6              	LD	A,198
-   651  0325  cd0000            	CALL	EXTERR
-   652  0328  4469736b2066756c  	DEFM	"Disk full"
+   732  03a7  00                	DEFB	0
+   733                          ;
+   734  03a8  c5                BDOS0:	PUSH	BC
+   735  03a9  d5                	PUSH	DE
+   736  03aa  e5                	PUSH	HL
+   737  03ab  dde5              	PUSH	IX
+   738  03ad  fde5              	PUSH	IY
+   739  03af  4f                	LD	C,A
+   740  03b0  cd0500            	CALL	BDOS
+   741  03b3  24                	INC	H
+   742  03b4  25                	DEC	H
+   743  03b5  fde1              	POP	IY
+   744  03b7  dde1              	POP	IX
+   745  03b9  e1                	POP	HL
+   746  03ba  d1                	POP	DE
+   747  03bb  c1                	POP	BC
+   748  03bc  c9                	RET
+   749                          ;
+   750                          ;WRITE - Write a record to a disk file.
+   751                          ;   Inputs: DE addresses FCB.
+   752                          ;           HL = address to get data.
+   753                          ; Destroys: A,F
+   754                          ;
+   755  03bd  cd1b04            WRITE:	CALL	SETDMA
+   756  03c0  3e28              	LD	A,40
+   757  03c2  cd9103            	CALL	BDOS1
+   758  03c5  280f              	JR	Z,INCSEC
+   759  03c7  3ec6              	LD	A,198
+   760  03c9  cd0000            	CALL	EXTERR
+   761  03cc  4469736b2066756c  	DEFM	"Disk full"
               6c                
-   653  0331  00                	DEFB	0
-   654                          ;
-   655                          ;INCSEC - Increment random record number.
-   656                          ;   Inputs: DE addresses FCB.
-   657                          
-   658  0332  e5                INCSEC:	PUSH	HL
-   659  0333  212100            	LD	HL,33
-   660  0336  19                	ADD	HL,DE
-   661  0337  34                INCS1:	INC	(HL)
-   662  0338  23                	INC	HL
-   663  0339  28fc              	JR	Z,INCS1
-   664  033b  e1                	POP	HL
-   665  033c  c9                	RET
-   666                          
-   667                          ;OPEN - Open a file for access.
-   668                          ;   Inputs: FCB set up.
-   669                          ;   Outputs: DE = FCB
-   670                          ;            A=0 & Z-flag set indicates Not Found.
-   671                          ;            Carry = 0
-   672                          ;   Destroys: A,D,E,F
-   673                          ;
-   674  033d  115c00            OPEN:	LD	DE,FCB
-   675  0340  3e0f              	LD	A,15
-   676  0342  cded02            	CALL	BDOS1
-   677  0345  3c                	INC	A
-   678  0346  c9                	RET
-   679                          
-   680                          ;CREATE - Create a disk file for writing.
-   681                          ;   Inputs: FCB set up.
-   682                          ;   Outputs: DE = FCB
-   683                          ;            A=0 & Z-flag set indicates directory full.
-   684                          ;            Carry = 0
-   685                          ;   Destroys: A,D,E,F
-   686                          ;
-   687  0347  cd5903            CREATE:	CALL	CHKAMB
-   688  034a  115c00            	LD	DE,FCB
-   689  034d  3e13              	LD	A,19
-   690  034f  cded02            	CALL	BDOS1		;DELETE
-   691  0352  3e16              	LD	A,22
-   692  0354  cded02            	CALL	BDOS1		;MAKE
-   693  0357  3c                	INC	A
-   694  0358  c9                	RET
-   695                          ;
-   696                          ;CHKAMB - Check for ambiguous filename.
-   697                          ; Destroys: A,D,E,F
-   698                          ;
-   699  0359  c5                CHKAMB:	PUSH	BC
-   700  035a  115c00            	LD	DE,FCB
-   701  035d  060c              	LD	B,12
-   702  035f  1a                CHKAM1:	LD	A,(DE)
-   703  0360  fe3f              	CP	'?'
-   704  0362  2805              	JR	Z,AMBIG		;AMBIGUOUS
-   705  0364  13                	INC	DE
-   706  0365  10f8              	DJNZ	CHKAM1
-   707  0367  c1                	POP	BC
-   708  0368  c9                	RET
-   709  0369  3ecc              AMBIG:	LD	A,204
-   710  036b  cd0000            	CALL	EXTERR
-   711  036e  426164206e616d65  	DEFM	"Bad name"
-   712  0376  00                	DEFB	0
-   713                          ;
-   714                          ;SETDMA - Set "DMA" address.
-   715                          ;   Inputs: HL = address
-   716                          ; Destroys: A,F
-   717                          ;
-   718  0377  3e1a              SETDMA:	LD	A,26
-   719  0379  eb                	EX	DE,HL
-   720  037a  cd0403            	CALL	BDOS0
-   721  037d  eb                	EX	DE,HL
-   722  037e  c9                	RET
-   723                          ;
-   724                          ;FIND - Find file parameters from channel.
-   725                          ;   Inputs: E = channel
-   726                          ;  Outputs: DE addresses FCB
-   727                          ;           HL addresses pointer byte (FCB+37)
-   728                          ; Destroys: A,D,E,H,L,F
-   729                          ;
-   730  037f  1c                FIND:	INC	E		;N.B. channel 8 is SPOOL/EXEC
-   731  0380  1d                	DEC	E
-   732  0381  2808              	JR	Z,CHANER
-   733  0383  cda003            	CALL	FIND1
-   734  0386  212500            	LD	HL,37
-   735  0389  19                	ADD	HL,DE
-   736  038a  c0                	RET	NZ
-   737  038b  3ede              CHANER:	LD	A,222
-   738  038d  cd0000            	CALL	EXTERR
-   739  0390  496e76616c696420  	DEFM	"Invalid channel"
+   762  03d5  00                	DEFB	0
+   763                          ;
+   764                          ;INCSEC - Increment random record number.
+   765                          ;   Inputs: DE addresses FCB.
+   766                          
+   767  03d6  e5                INCSEC:	PUSH	HL
+   768  03d7  212100            	LD	HL,33
+   769  03da  19                	ADD	HL,DE
+   770  03db  34                INCS1:	INC	(HL)
+   771  03dc  23                	INC	HL
+   772  03dd  28fc              	JR	Z,INCS1
+   773  03df  e1                	POP	HL
+   774  03e0  c9                	RET
+   775                          
+   776                          ;OPEN - Open a file for access.
+   777                          ;   Inputs: FCB set up.
+   778                          ;   Outputs: DE = FCB
+   779                          ;            A=0 & Z-flag set indicates Not Found.
+   780                          ;            Carry = 0
+   781                          ;   Destroys: A,D,E,F
+   782                          ;
+   783  03e1  115c00            OPEN:	LD	DE,FCB
+   784  03e4  3e0f              	LD	A,15
+   785  03e6  cd9103            	CALL	BDOS1
+   786  03e9  3c                	INC	A
+   787  03ea  c9                	RET
+   788                          
+   789                          ;CREATE - Create a disk file for writing.
+   790                          ;   Inputs: FCB set up.
+   791                          ;   Outputs: DE = FCB
+   792                          ;            A=0 & Z-flag set indicates directory full.
+   793                          ;            Carry = 0
+   794                          ;   Destroys: A,D,E,F
+   795                          ;
+   796  03eb  cdfd03            CREATE:	CALL	CHKAMB
+   797  03ee  115c00            	LD	DE,FCB
+   798  03f1  3e13              	LD	A,19
+   799  03f3  cd9103            	CALL	BDOS1		;DELETE
+   800  03f6  3e16              	LD	A,22
+   801  03f8  cd9103            	CALL	BDOS1		;MAKE
+   802  03fb  3c                	INC	A
+   803  03fc  c9                	RET
+   804                          ;
+   805                          ;CHKAMB - Check for ambiguous filename.
+   806                          ; Destroys: A,D,E,F
+   807                          ;
+   808  03fd  c5                CHKAMB:	PUSH	BC
+   809  03fe  115c00            	LD	DE,FCB
+   810  0401  060c              	LD	B,12
+   811  0403  1a                CHKAM1:	LD	A,(DE)
+   812  0404  fe3f              	CP	'?'
+   813  0406  2805              	JR	Z,AMBIG		;AMBIGUOUS
+   814  0408  13                	INC	DE
+   815  0409  10f8              	DJNZ	CHKAM1
+   816  040b  c1                	POP	BC
+   817  040c  c9                	RET
+   818  040d  3ecc              AMBIG:	LD	A,204
+   819  040f  cd0000            	CALL	EXTERR
+   820  0412  426164206e616d65  	DEFM	"Bad name"
+   821  041a  00                	DEFB	0
+   822                          ;
+   823                          ;SETDMA - Set "DMA" address.
+   824                          ;   Inputs: HL = address
+   825                          ; Destroys: A,F
+   826                          ;
+   827  041b  3e1a              SETDMA:	LD	A,26
+   828  041d  eb                	EX	DE,HL
+   829  041e  cda803            	CALL	BDOS0
+   830  0421  eb                	EX	DE,HL
+   831  0422  c9                	RET
+   832                          ;
+   833                          ;FIND - Find file parameters from channel.
+   834                          ;   Inputs: E = channel
+   835                          ;  Outputs: DE addresses FCB
+   836                          ;           HL addresses pointer byte (FCB+37)
+   837                          ; Destroys: A,D,E,H,L,F
+   838                          ;
+   839  0423  1c                FIND:	INC	E		;N.B. channel 8 is SPOOL/EXEC
+   840  0424  1d                	DEC	E
+   841  0425  2808              	JR	Z,CHANER
+   842  0427  cd4404            	CALL	FIND1
+   843  042a  212500            	LD	HL,37
+   844  042d  19                	ADD	HL,DE
+   845  042e  c0                	RET	NZ
+   846  042f  3ede              CHANER:	LD	A,222
+   847  0431  cd0000            	CALL	EXTERR
+   848  0434  496e76616c696420  	DEFM	"Invalid channel"
               6368616e6e656c    
-   740  039f  00                	DEFB	0
-   741                          ;
-   742                          ;FIND1 - Look up file table.
-   743                          ;   Inputs: E = channel
-   744                          ;  Outputs: Z-flag set = file not opened
-   745                          ;           If NZ, DE addresses FCB
-   746                          ;                  HL points into table
-   747                          ; Destroys: A,D,E,H,L,F
-   748                          ;
-   749  03a0  7b                FIND1:	LD	A,E
-   750  03a1  e607              	AND	7
-   751  03a3  87                	ADD	A,A
-   752  03a4  5f                	LD	E,A
-   753  03a5  1600              	LD	D,0
-   754  03a7  210809            	LD	HL,TABLE
-   755  03aa  19                	ADD	HL,DE
-   756  03ab  5e                	LD	E,(HL)
-   757  03ac  23                	INC	HL
-   758  03ad  56                	LD	D,(HL)
-   759  03ae  7a                	LD	A,D
-   760  03af  b3                	OR	E
-   761  03b0  c9                	RET
-   762                          ;
-   763                          ;SETUP - Set up File Control Block.
-   764                          ;   Inputs: HL addresses filename
-   765                          ;           Format  [A:]FILENAME[.EXT]
-   766                          ;           Device defaults to current drive
-   767                          ;           Extension defaults to .BBC
-   768                          ;           A = fill character
-   769                          ;  Outputs: HL updated
-   770                          ;           A = terminator
-   771                          ;           BC = 128
-   772                          ; Destroys: A,B,C,H,L,F
-   773                          ;
-   774                          ; MSX-DOS2 path-aware compatibility shim.
-   775                          ; Keep the raw path string in PATHBUF so command handlers can migrate from
-   776                          ; CP/M FCB parsing to path-based DOS calls without immediately breaking the
-   777                          ; legacy file layer.
-   778                          ;
-   779  03b1  110000            PATHSAVE:	LD	DE,PATHBUF
-   780  03b4  af                	XOR	A
-   781  03b5  7e                PATHS1:	LD	A,(HL)
-   782  03b6  b7                	OR	A
-   783  03b7  2828              	JR	Z,PATHS2
-   784  03b9  fe0d              	CP	CR
-   785  03bb  2824              	JR	Z,PATHS2
-   786  03bd  fe20              	CP	' '
-   787  03bf  2820              	JR	Z,PATHS2
-   788  03c1  fe3d              	CP	'='
-   789  03c3  281c              	JR	Z,PATHS2
-   790  03c5  fe22              	CP	'"'
-   791  03c7  2818              	JR	Z,PATHS2
-   792  03c9  fe7c              	CP	'|'
-   793  03cb  2814              	JR	Z,PATHS2
-   794  03cd  fe2f              	CP	'/'
-   795  03cf  2809              	JR	Z,PATHS3
-   796  03d1  fe5c              	CP	5CH		; '\'
-   797  03d3  2805              	JR	Z,PATHS3
-   798  03d5  12                	LD	(DE),A
-   799  03d6  13                	INC	DE
-   800  03d7  23                	INC	HL
-   801  03d8  18db              	JR	PATHS1
-   802  03da  3e5c              PATHS3:	LD	A,5CH
-   803  03dc  12                	LD	(DE),A
-   804  03dd  13                	INC	DE
-   805  03de  23                	INC	HL
-   806  03df  18d4              	JR	PATHS1
-   807  03e1  af                PATHS2:	XOR	A
-   808  03e2  12                	LD	(DE),A
-   809  03e3  c9                	RET
-   810                          ;
-   811                          ;PATHNORM - normalise a path string stored in PATHBUF to a DOS2-friendly form.
-   812                          ;   Normalises '/' to '\' and uppercases the drive/path characters.
-   813                          ;   The original FCB-based layer still receives the CP/M-compatible name, but
-   814                          ;   PATHBUF preserves the full path information needed for a later DOS2 switch.
-   815                          ;
-   816  03e4  f5                PATHNORM:	PUSH	AF
-   817  03e5  d5                	PUSH	DE
-   818  03e6  e5                	PUSH	HL
-   819  03e7  210000            	LD	HL,PATHBUF
-   820  03ea  7e                PATHN1:	LD	A,(HL)
-   821  03eb  b7                	OR	A
-   822  03ec  2815              	JR	Z,PATHNEND
-   823  03ee  fe2f              	CP	'/'
-   824  03f0  280b              	JR	Z,PATHN2
-   825  03f2  fe5c              	CP	5CH
-   826  03f4  2807              	JR	Z,PATHN2
-   827  03f6  cd1e07            	CALL	UPPRC
-   828  03f9  77                	LD	(HL),A
-   829  03fa  23                	INC	HL
-   830  03fb  18ed              	JR	PATHN1
-   831  03fd  3e5c              PATHN2:	LD	A,5CH
-   832  03ff  77                	LD	(HL),A
-   833  0400  23                	INC	HL
-   834  0401  18e7              	JR	PATHN1
-   835  0403  e1                PATHNEND:	POP	HL
-   836  0404  d1                	POP	DE
-   837  0405  f1                	POP	AF
-   838  0406  c9                	RET
-   839                          
-   840                          ; Add the BASIC default extension to PATHBUF when the supplied path has none.
-   841                          DOS2_DEFAULT_EXT:
-   842  0407  f5                	PUSH	AF
-   843  0408  c5                	PUSH	BC
-   844  0409  d5                	PUSH	DE
-   845  040a  e5                	PUSH	HL
-   846  040b  210000            	LD	HL,PATHBUF
-   847  040e  0600              	LD	B,0
-   848                          DOS2_EXT_SCAN:
-   849  0410  7e                	LD	A,(HL)
-   850  0411  b7                	OR	A
-   851  0412  2808              	JR	Z,DOS2_EXT_END
-   852  0414  fe2e              	CP	'.'
-   853  0416  2817              	JR	Z,DOS2_EXT_HAVE
-   854  0418  23                	INC	HL
-   855  0419  04                	INC	B
-   856  041a  18f4              	JR	DOS2_EXT_SCAN
-   857                          DOS2_EXT_END:
-   858  041c  78                	LD	A,B
-   859  041d  fe3d              	CP	61			; PATHBUF capacity (including terminator)
-   860  041f  300e              	JR	NC,DOS2_EXT_HAVE
-   861  0421  362e              	LD	(HL),'.'
-   862  0423  23                	INC	HL
-   863  0424  3642              	LD	(HL),'B'
-   864  0426  23                	INC	HL
-   865  0427  3642              	LD	(HL),'B'
-   866  0429  23                	INC	HL
-   867  042a  3643              	LD	(HL),'C'
-   868  042c  23                	INC	HL
-   869  042d  3600              	LD	(HL),0
-   870                          DOS2_EXT_HAVE:
-   871  042f  e1                	POP	HL
-   872  0430  d1                	POP	DE
-   873  0431  c1                	POP	BC
-   874  0432  f1                	POP	AF
-   875  0433  c9                	RET
-   876                          ;
-   877                          ;FCB FORMAT (36 BYTES TOTAL):
-   878                          ; 0      0=SAME DISK, 1=DISK A, 2=DISK B (ETC.)
-   879                          ; 1-8    FILENAME, PADDED WITH SPACES
-   880                          ; 9-11   EXTENSION, PADDED WITH SPACES
-   881                          ; 12     CURRENT EXTENT, SET TO ZERO
-   882                          ; 32-35  CLEARED TO ZERO
-   883                          ;
-   884  0434  3e20              SETUP0:	LD	A,' '
-   885  0436  d5                SETUP:	PUSH	DE
-   886  0437  e5                	PUSH	HL
-   887  0438  f5                	PUSH	AF
-   888  0439  cdb103            	CALL	PATHSAVE
-   889  043c  f1                	POP	AF
-   890  043d  116500            	LD	DE,FCB+9
-   891  0440  21e404            	LD	HL,BBC
-   892  0443  010300            	LD	BC,3
-   893  0446  edb0              	LDIR
-   894  0448  217c00            	LD	HL,FCB+32
-   895  044b  0604              	LD	B,4
-   896  044d  71                SETUP1:	LD	(HL),C
-   897  044e  23                	INC	HL
-   898  044f  10fc              	DJNZ	SETUP1
-   899  0451  e1                	POP	HL
-   900  0452  4f                	LD	C,A
-   901  0453  af                	XOR	A
-   902  0454  12                	LD	(DE),A
-   903  0455  d1                	POP	DE
-   904  0456  cddd04            	CALL	SKIPSP
-   905  0459  fe22              	CP	'"'
-   906  045b  2027              	JR	NZ,SETUP2
-   907  045d  23                	INC	HL
-   908  045e  cddd04            	CALL	SKIPSP
-   909  0461  cd8404            	CALL	SETUP2
-   910  0464  fe22              	CP	'"'
-   911  0466  23                	INC	HL
-   912  0467  2874              	JR	Z,SKIPSP
-   913  0469  3efd              BADSTR:	LD	A,253
-   914  046b  cd0000            	CALL	EXTERR
-   915  046e  4261642073747269  	DEFM	"Bad string"
-              6e67              
-   916  0478  00                	DEFB	0
-   917                          ;
-   918  0479  7e                PARSE:	LD	A,(HL)
-   919  047a  23                	INC	HL
-   920  047b  fe60              	CP	'`'
-   921  047d  d0                	RET	NC
-   922  047e  fe3f              	CP	'?'
-   923  0480  d8                	RET	C
-   924  0481  ee40              	XOR	40H
-   925  0483  c9                	RET
-   926                          ;
-   927  0484  d5                SETUP2:	PUSH	DE
-   928  0485  23                	INC	HL
-   929  0486  7e                	LD	A,(HL)
-   930  0487  fe3a              	CP	':'
-   931  0489  2b                	DEC	HL
-   932  048a  78                	LD	A,B
-   933  048b  2005              	JR	NZ,DEVICE
-   934  048d  7e                	LD	A,(HL)		;DRIVE
-   935  048e  e61f              	AND	31
-   936  0490  23                	INC	HL
-   937  0491  23                	INC	HL
-   938  0492  115c00            DEVICE:	LD	DE,FCB
-   939  0495  12                	LD	(DE),A
-   940  0496  13                	INC	DE
-   941  0497  0608              	LD	B,8
-   942  0499  7e                COPYF:	LD	A,(HL)
-   943  049a  fe2e              	CP	'.'
-   944  049c  2822              	JR	Z,COPYF1
-   945  049e  fe20              	CP	' '
-   946  04a0  281e              	JR	Z,COPYF1
-   947  04a2  fe0d              	CP	CR
-   948  04a4  281a              	JR	Z,COPYF1
-   949  04a6  fe3d              	CP	'='
-   950  04a8  2816              	JR	Z,COPYF1
-   951  04aa  fe22              	CP	'"'
-   952  04ac  2812              	JR	Z,COPYF1
-   953  04ae  0e3f              	LD	C,'?'
-   954  04b0  fe2a              	CP	'*'
-   955  04b2  280c              	JR	Z,COPYF1
-   956  04b4  0e20              	LD	C,' '
-   957  04b6  23                	INC	HL
-   958  04b7  fe7c              	CP	'|'
-   959  04b9  2006              	JR	NZ,COPYF2
-   960  04bb  cd7904            	CALL	PARSE
-   961  04be  1804              	JR	COPYF0
-   962  04c0  79                COPYF1:	LD	A,C
-   963  04c1  cd1e07            COPYF2:	CALL	UPPRC
-   964  04c4  12                COPYF0:	LD	(DE),A
-   965  04c5  13                	INC	DE
-   966  04c6  10d1              	DJNZ	COPYF
-   967  04c8  7e                COPYF3:	LD	A,(HL)
-   968  04c9  23                	INC	HL
-   969  04ca  fe2a              	CP	'*'
-   970  04cc  28fa              	JR	Z,COPYF3
-   971  04ce  fe2e              	CP	'.'
-   972  04d0  012003            	LD	BC,3*256+' '
-   973  04d3  116500            	LD	DE,FCB+9
-   974  04d6  28c1              	JR	Z,COPYF
-   975  04d8  2b                	DEC	HL
-   976  04d9  d1                	POP	DE
-   977  04da  018000            	LD	BC,128
-   978  04dd  7e                SKIPSP:	LD	A,(HL)
-   979  04de  fe20              	CP	' '
-   980  04e0  c0                	RET	NZ
-   981  04e1  23                	INC	HL
-   982  04e2  18f9              	JR	SKIPSP
-   983                          ;
-   984  04e4  424243            BBC:	DEFM	"BBC"
+   849  0443  00                	DEFB	0
+   850                          ;
+   851                          ;FIND1 - Look up file table.
+   852                          ;   Inputs: E = channel
+   853                          ;  Outputs: Z-flag set = file not opened
+   854                          ;           If NZ, DE addresses FCB
+   855                          ;                  HL points into table
+   856                          ; Destroys: A,D,E,H,L,F
+   857                          ;
+   858  0444  7b                FIND1:	LD	A,E
+   859  0445  e607              	AND	7
+   860  0447  87                	ADD	A,A
+   861  0448  5f                	LD	E,A
+   862  0449  1600              	LD	D,0
+   863  044b  21ac09            	LD	HL,TABLE
+   864  044e  19                	ADD	HL,DE
+   865  044f  5e                	LD	E,(HL)
+   866  0450  23                	INC	HL
+   867  0451  56                	LD	D,(HL)
+   868  0452  7a                	LD	A,D
+   869  0453  b3                	OR	E
+   870  0454  c9                	RET
+   871                          ;
+   872                          ;SETUP - Set up File Control Block.
+   873                          ;   Inputs: HL addresses filename
+   874                          ;           Format  [A:]FILENAME[.EXT]
+   875                          ;           Device defaults to current drive
+   876                          ;           Extension defaults to .BBC
+   877                          ;           A = fill character
+   878                          ;  Outputs: HL updated
+   879                          ;           A = terminator
+   880                          ;           BC = 128
+   881                          ; Destroys: A,B,C,H,L,F
+   882                          ;
+   883                          ; MSX-DOS2 path-aware compatibility shim.
+   884                          ; Keep the raw path string in PATHBUF so command handlers can migrate from
+   885                          ; CP/M FCB parsing to path-based DOS calls without immediately breaking the
+   886                          ; legacy file layer.
+   887                          ;
+   888  0455  110000            PATHSAVE:	LD	DE,PATHBUF
+   889  0458  af                	XOR	A
+   890  0459  7e                PATHS1:	LD	A,(HL)
+   891  045a  b7                	OR	A
+   892  045b  2828              	JR	Z,PATHS2
+   893  045d  fe0d              	CP	CR
+   894  045f  2824              	JR	Z,PATHS2
+   895  0461  fe20              	CP	' '
+   896  0463  2820              	JR	Z,PATHS2
+   897  0465  fe3d              	CP	'='
+   898  0467  281c              	JR	Z,PATHS2
+   899  0469  fe22              	CP	'"'
+   900  046b  2818              	JR	Z,PATHS2
+   901  046d  fe7c              	CP	'|'
+   902  046f  2814              	JR	Z,PATHS2
+   903  0471  fe2f              	CP	'/'
+   904  0473  2809              	JR	Z,PATHS3
+   905  0475  fe5c              	CP	5CH		; '\'
+   906  0477  2805              	JR	Z,PATHS3
+   907  0479  12                	LD	(DE),A
+   908  047a  13                	INC	DE
+   909  047b  23                	INC	HL
+   910  047c  18db              	JR	PATHS1
+   911  047e  3e5c              PATHS3:	LD	A,5CH
+   912  0480  12                	LD	(DE),A
+   913  0481  13                	INC	DE
+   914  0482  23                	INC	HL
+   915  0483  18d4              	JR	PATHS1
+   916  0485  af                PATHS2:	XOR	A
+   917  0486  12                	LD	(DE),A
+   918  0487  c9                	RET
+   919                          ;
+   920                          ;PATHNORM - normalise a path string stored in PATHBUF to a DOS2-friendly form.
+   921                          ;   Normalises '/' to '\' and uppercases the drive/path characters.
+   922                          ;   The original FCB-based layer still receives the CP/M-compatible name, but
+   923                          ;   PATHBUF preserves the full path information needed for a later DOS2 switch.
+   924                          ;
+   925  0488  f5                PATHNORM:	PUSH	AF
+   926  0489  d5                	PUSH	DE
+   927  048a  e5                	PUSH	HL
+   928  048b  210000            	LD	HL,PATHBUF
+   929  048e  7e                PATHN1:	LD	A,(HL)
+   930  048f  b7                	OR	A
+   931  0490  2815              	JR	Z,PATHNEND
+   932  0492  fe2f              	CP	'/'
+   933  0494  280b              	JR	Z,PATHN2
+   934  0496  fe5c              	CP	5CH
+   935  0498  2807              	JR	Z,PATHN2
+   936  049a  cdc207            	CALL	UPPRC
+   937  049d  77                	LD	(HL),A
+   938  049e  23                	INC	HL
+   939  049f  18ed              	JR	PATHN1
+   940  04a1  3e5c              PATHN2:	LD	A,5CH
+   941  04a3  77                	LD	(HL),A
+   942  04a4  23                	INC	HL
+   943  04a5  18e7              	JR	PATHN1
+   944  04a7  e1                PATHNEND:	POP	HL
+   945  04a8  d1                	POP	DE
+   946  04a9  f1                	POP	AF
+   947  04aa  c9                	RET
+   948                          
+   949                          ; Add the BASIC default extension to PATHBUF when the supplied path has none.
+   950                          DOS2_DEFAULT_EXT:
+   951  04ab  f5                	PUSH	AF
+   952  04ac  c5                	PUSH	BC
+   953  04ad  d5                	PUSH	DE
+   954  04ae  e5                	PUSH	HL
+   955  04af  210000            	LD	HL,PATHBUF
+   956  04b2  0600              	LD	B,0
+   957                          DOS2_EXT_SCAN:
+   958  04b4  7e                	LD	A,(HL)
+   959  04b5  b7                	OR	A
+   960  04b6  2808              	JR	Z,DOS2_EXT_END
+   961  04b8  fe2e              	CP	'.'
+   962  04ba  2817              	JR	Z,DOS2_EXT_HAVE
+   963  04bc  23                	INC	HL
+   964  04bd  04                	INC	B
+   965  04be  18f4              	JR	DOS2_EXT_SCAN
+   966                          DOS2_EXT_END:
+   967  04c0  78                	LD	A,B
+   968  04c1  fe3d              	CP	61			; PATHBUF capacity (including terminator)
+   969  04c3  300e              	JR	NC,DOS2_EXT_HAVE
+   970  04c5  362e              	LD	(HL),'.'
+   971  04c7  23                	INC	HL
+   972  04c8  3642              	LD	(HL),'B'
+   973  04ca  23                	INC	HL
+   974  04cb  3642              	LD	(HL),'B'
+   975  04cd  23                	INC	HL
+   976  04ce  3643              	LD	(HL),'C'
+   977  04d0  23                	INC	HL
+   978  04d1  3600              	LD	(HL),0
+   979                          DOS2_EXT_HAVE:
+   980  04d3  e1                	POP	HL
+   981  04d4  d1                	POP	DE
+   982  04d5  c1                	POP	BC
+   983  04d6  f1                	POP	AF
+   984  04d7  c9                	RET
    985                          ;
-   986                          ;HEX - Read a hex string and convert to binary.
-   987                          ;   Inputs: HL = text pointer
-   988                          ;  Outputs: HL = updated text pointer
-   989                          ;           DE = value
-   990                          ;            A = terminator (spaces skipped)
-   991                          ; Destroys: A,D,E,H,L,F
+   986                          ;FCB FORMAT (36 BYTES TOTAL):
+   987                          ; 0      0=SAME DISK, 1=DISK A, 2=DISK B (ETC.)
+   988                          ; 1-8    FILENAME, PADDED WITH SPACES
+   989                          ; 9-11   EXTENSION, PADDED WITH SPACES
+   990                          ; 12     CURRENT EXTENT, SET TO ZERO
+   991                          ; 32-35  CLEARED TO ZERO
    992                          ;
-   993  04e7  110000            HEX:	LD	DE,0		;INITIALISE
-   994  04ea  cddd04            	CALL	SKIPSP
-   995  04ed  7e                HEX1:	LD	A,(HL)
-   996  04ee  cd1e07            	CALL	UPPRC
-   997  04f1  fe30              	CP	'0'
-   998  04f3  38e8              	JR	C,SKIPSP
-   999  04f5  fe3a              	CP	'9'+1
-  1000  04f7  380a              	JR	C,HEX2
-  1001  04f9  fe41              	CP	'A'
-  1002  04fb  38e0              	JR	C,SKIPSP
-  1003  04fd  fe47              	CP	'F'+1
-  1004  04ff  30dc              	JR	NC,SKIPSP
-  1005  0501  d607              	SUB	7
-  1006  0503  e60f              HEX2:	AND	0FH
-  1007  0505  eb                	EX	DE,HL
-  1008  0506  29                	ADD	HL,HL
-  1009  0507  29                	ADD	HL,HL
-  1010  0508  29                	ADD	HL,HL
-  1011  0509  29                	ADD	HL,HL
-  1012  050a  eb                	EX	DE,HL
-  1013  050b  b3                	OR	E
-  1014  050c  5f                	LD	E,A
-  1015  050d  23                	INC	HL
-  1016  050e  18dd              	JR	HEX1
-  1017                          ;
-  1018                          ;OSCLI - Process an "operating system" command
-  1019                          ;
-  1020  0510  cddd04            OSCLI:	CALL	SKIPSP
-  1021  0513  fe0d              	CP	CR
-  1022  0515  c8                	RET	Z
-  1023  0516  fe7c              	CP	'|'
-  1024  0518  c8                	RET	Z
-  1025  0519  fe2e              	CP	'.'
-  1026  051b  caf605            	JP	Z,DOT		;*.
-  1027  051e  fe2a              	CP	'*'
-  1028  0520  2001              	JR	NZ,OSCLIC
-  1029  0522  23                	INC	HL
-  1030                          OSCLIC:
-  1031  0523  eb                	EX	DE,HL
-  1032  0524  214507            	LD	HL,COMDS ; OS command table
-  1033  0527  1a                OSCLI0:	LD	A,(DE)
-  1034  0528  cd1e07            	CALL	UPPRC
-  1035  052b  be                	CP	(HL)
-  1036  052c  280c              	JR	Z,OSCLI2
-  1037  052e  daa605            	JP	C,HUH   ;END　OF　OS Command Table
-  1038  0531  cb7e              OSCLI1:	BIT	7,(HL)  ;　
-  1039  0533  23                	INC	HL
-  1040  0534  28fb              	JR	Z,OSCLI1
-  1041  0536  23                	INC	HL
-  1042  0537  23                	INC	HL
-  1043  0538  18ed              	JR	OSCLI0
-  1044                          ;
-  1045  053a  d5                OSCLI2:	PUSH	DE
-  1046  053b  13                OSCLI3:	INC	DE
-  1047  053c  23                	INC	HL
-  1048  053d  1a                	LD	A,(DE)
-  1049  053e  cd1e07            	CALL	UPPRC
-  1050  0541  fe2e              	CP	'.'		;ABBREVIATED?
-  1051  0543  280a              	JR	Z,OSCLI4
-  1052  0545  ae                	XOR	(HL)
-  1053  0546  28f3              	JR	Z,OSCLI3
-  1054  0548  fe80              	CP	80H
-  1055  054a  2803              	JR	Z,OSCLI4
-  1056  054c  d1                	POP	DE
-  1057  054d  18e2              	JR	OSCLI1
-  1058                          ;
-  1059  054f  f1                OSCLI4:	POP	AF
-  1060  0550  13                	INC	DE
-  1061  0551  cb7e              OSCLI5:	BIT	7,(HL)
-  1062  0553  23                	INC	HL
-  1063  0554  28fb              	JR	Z,OSCLI5
-  1064  0556  7e                	LD	A,(HL)
-  1065  0557  23                	INC	HL
-  1066  0558  66                	LD	H,(HL)
-  1067  0559  6f                	LD	L,A
-  1068  055a  e5                	PUSH	HL
-  1069  055b  eb                	EX	DE,HL
-  1070  055c  c3dd04            	JP	SKIPSP
-  1071                          ;
-  1072                          ;
-  1073  055f  cd3404            ERA:	CALL	SETUP0		;*ERA, *ERASE
-  1074  0562  0e13              	LD	C,19
-  1075  0564  1833              	JR	XEQ		;"DELETE"
-  1076                          ;
-  1077  0566  0e0d              RES:	LD	C,13		;*RESET
-  1078  0568  182f              	JR	XEQ		;"RESET"
-  1079                          ;
-  1080  056a  cd3404            DRV:	CALL	SETUP0		;*DRIVE
-  1081  056d  3a5c00            	LD	A,(FCB)
-  1082  0570  3d                	DEC	A
-  1083  0571  faa605            	JP	M,HUH
-  1084  0574  5f                	LD	E,A
-  1085  0575  0e0e              	LD	C,14
-  1086  0577  1823              	JR	XEQ0
-  1087                          ;
-  1088  0579  cd3404            REN:	CALL	SETUP0		;*REN, *RENAME
-  1089  057c  fe3d              	CP	'='
-  1090  057e  2026              	JR	NZ,HUH
-  1091  0580  23                	INC	HL		;SKIP "="
-  1092  0581  e5                	PUSH	HL
-  1093  0582  cdb705            	CALL	EXISTS
-  1094  0585  215c00            	LD	HL,FCB
-  1095  0588  116c00            	LD	DE,FCB+16
-  1096  058b  010c00            	LD	BC,12
-  1097  058e  edb0              	LDIR
-  1098  0590  e1                	POP	HL
-  1099  0591  cd3404            	CALL	SETUP0
-  1100  0594  cd5903            	CALL	CHKAMB
-  1101  0597  0e17              	LD	C,23
-  1102  0599  115c00            XEQ:	LD	DE,FCB
-  1103  059c  7e                XEQ0:	LD	A,(HL)
-  1104  059d  fe0d              	CP	CR
-  1105  059f  2005              	JR	NZ,HUH
-  1106  05a1  79                BDC:	LD	A,C
-  1107  05a2  cded02            	CALL	BDOS1
-  1108  05a5  f0                	RET	P
-  1109  05a6  3efe              HUH:	LD	A,254
-  1110  05a8  cd0000            	CALL	EXTERR
-  1111  05ab  42616420636f6d6d  	DEFM	"Bad command"
+   993  04d8  3e20              SETUP0:	LD	A,' '
+   994  04da  d5                SETUP:	PUSH	DE
+   995  04db  e5                	PUSH	HL
+   996  04dc  f5                	PUSH	AF
+   997  04dd  cd5504            	CALL	PATHSAVE
+   998  04e0  f1                	POP	AF
+   999  04e1  116500            	LD	DE,FCB+9
+  1000  04e4  218805            	LD	HL,BBC
+  1001  04e7  010300            	LD	BC,3
+  1002  04ea  edb0              	LDIR
+  1003  04ec  217c00            	LD	HL,FCB+32
+  1004  04ef  0604              	LD	B,4
+  1005  04f1  71                SETUP1:	LD	(HL),C
+  1006  04f2  23                	INC	HL
+  1007  04f3  10fc              	DJNZ	SETUP1
+  1008  04f5  e1                	POP	HL
+  1009  04f6  4f                	LD	C,A
+  1010  04f7  af                	XOR	A
+  1011  04f8  12                	LD	(DE),A
+  1012  04f9  d1                	POP	DE
+  1013  04fa  cd8105            	CALL	SKIPSP
+  1014  04fd  fe22              	CP	'"'
+  1015  04ff  2027              	JR	NZ,SETUP2
+  1016  0501  23                	INC	HL
+  1017  0502  cd8105            	CALL	SKIPSP
+  1018  0505  cd2805            	CALL	SETUP2
+  1019  0508  fe22              	CP	'"'
+  1020  050a  23                	INC	HL
+  1021  050b  2874              	JR	Z,SKIPSP
+  1022  050d  3efd              BADSTR:	LD	A,253
+  1023  050f  cd0000            	CALL	EXTERR
+  1024  0512  4261642073747269  	DEFM	"Bad string"
+              6e67              
+  1025  051c  00                	DEFB	0
+  1026                          ;
+  1027  051d  7e                PARSE:	LD	A,(HL)
+  1028  051e  23                	INC	HL
+  1029  051f  fe60              	CP	'`'
+  1030  0521  d0                	RET	NC
+  1031  0522  fe3f              	CP	'?'
+  1032  0524  d8                	RET	C
+  1033  0525  ee40              	XOR	40H
+  1034  0527  c9                	RET
+  1035                          ;
+  1036  0528  d5                SETUP2:	PUSH	DE
+  1037  0529  23                	INC	HL
+  1038  052a  7e                	LD	A,(HL)
+  1039  052b  fe3a              	CP	':'
+  1040  052d  2b                	DEC	HL
+  1041  052e  78                	LD	A,B
+  1042  052f  2005              	JR	NZ,DEVICE
+  1043  0531  7e                	LD	A,(HL)		;DRIVE
+  1044  0532  e61f              	AND	31
+  1045  0534  23                	INC	HL
+  1046  0535  23                	INC	HL
+  1047  0536  115c00            DEVICE:	LD	DE,FCB
+  1048  0539  12                	LD	(DE),A
+  1049  053a  13                	INC	DE
+  1050  053b  0608              	LD	B,8
+  1051  053d  7e                COPYF:	LD	A,(HL)
+  1052  053e  fe2e              	CP	'.'
+  1053  0540  2822              	JR	Z,COPYF1
+  1054  0542  fe20              	CP	' '
+  1055  0544  281e              	JR	Z,COPYF1
+  1056  0546  fe0d              	CP	CR
+  1057  0548  281a              	JR	Z,COPYF1
+  1058  054a  fe3d              	CP	'='
+  1059  054c  2816              	JR	Z,COPYF1
+  1060  054e  fe22              	CP	'"'
+  1061  0550  2812              	JR	Z,COPYF1
+  1062  0552  0e3f              	LD	C,'?'
+  1063  0554  fe2a              	CP	'*'
+  1064  0556  280c              	JR	Z,COPYF1
+  1065  0558  0e20              	LD	C,' '
+  1066  055a  23                	INC	HL
+  1067  055b  fe7c              	CP	'|'
+  1068  055d  2006              	JR	NZ,COPYF2
+  1069  055f  cd1d05            	CALL	PARSE
+  1070  0562  1804              	JR	COPYF0
+  1071  0564  79                COPYF1:	LD	A,C
+  1072  0565  cdc207            COPYF2:	CALL	UPPRC
+  1073  0568  12                COPYF0:	LD	(DE),A
+  1074  0569  13                	INC	DE
+  1075  056a  10d1              	DJNZ	COPYF
+  1076  056c  7e                COPYF3:	LD	A,(HL)
+  1077  056d  23                	INC	HL
+  1078  056e  fe2a              	CP	'*'
+  1079  0570  28fa              	JR	Z,COPYF3
+  1080  0572  fe2e              	CP	'.'
+  1081  0574  012003            	LD	BC,3*256+' '
+  1082  0577  116500            	LD	DE,FCB+9
+  1083  057a  28c1              	JR	Z,COPYF
+  1084  057c  2b                	DEC	HL
+  1085  057d  d1                	POP	DE
+  1086  057e  018000            	LD	BC,128
+  1087  0581  7e                SKIPSP:	LD	A,(HL)
+  1088  0582  fe20              	CP	' '
+  1089  0584  c0                	RET	NZ
+  1090  0585  23                	INC	HL
+  1091  0586  18f9              	JR	SKIPSP
+  1092                          ;
+  1093  0588  424243            BBC:	DEFM	"BBC"
+  1094                          ;
+  1095                          ;HEX - Read a hex string and convert to binary.
+  1096                          ;   Inputs: HL = text pointer
+  1097                          ;  Outputs: HL = updated text pointer
+  1098                          ;           DE = value
+  1099                          ;            A = terminator (spaces skipped)
+  1100                          ; Destroys: A,D,E,H,L,F
+  1101                          ;
+  1102  058b  110000            HEX:	LD	DE,0		;INITIALISE
+  1103  058e  cd8105            	CALL	SKIPSP
+  1104  0591  7e                HEX1:	LD	A,(HL)
+  1105  0592  cdc207            	CALL	UPPRC
+  1106  0595  fe30              	CP	'0'
+  1107  0597  38e8              	JR	C,SKIPSP
+  1108  0599  fe3a              	CP	'9'+1
+  1109  059b  380a              	JR	C,HEX2
+  1110  059d  fe41              	CP	'A'
+  1111  059f  38e0              	JR	C,SKIPSP
+  1112  05a1  fe47              	CP	'F'+1
+  1113  05a3  30dc              	JR	NC,SKIPSP
+  1114  05a5  d607              	SUB	7
+  1115  05a7  e60f              HEX2:	AND	0FH
+  1116  05a9  eb                	EX	DE,HL
+  1117  05aa  29                	ADD	HL,HL
+  1118  05ab  29                	ADD	HL,HL
+  1119  05ac  29                	ADD	HL,HL
+  1120  05ad  29                	ADD	HL,HL
+  1121  05ae  eb                	EX	DE,HL
+  1122  05af  b3                	OR	E
+  1123  05b0  5f                	LD	E,A
+  1124  05b1  23                	INC	HL
+  1125  05b2  18dd              	JR	HEX1
+  1126                          ;
+  1127                          ;OSCLI - Process an "operating system" command
+  1128                          ;
+  1129  05b4  cd8105            OSCLI:	CALL	SKIPSP
+  1130  05b7  fe0d              	CP	CR
+  1131  05b9  c8                	RET	Z
+  1132  05ba  fe7c              	CP	'|'
+  1133  05bc  c8                	RET	Z
+  1134  05bd  fe2e              	CP	'.'
+  1135  05bf  ca9a06            	JP	Z,DOT		;*.
+  1136  05c2  fe2a              	CP	'*'
+  1137  05c4  2001              	JR	NZ,OSCLIC
+  1138  05c6  23                	INC	HL
+  1139                          OSCLIC:
+  1140  05c7  eb                	EX	DE,HL
+  1141  05c8  21e907            	LD	HL,COMDS ; OS command table
+  1142  05cb  1a                OSCLI0:	LD	A,(DE)
+  1143  05cc  cdc207            	CALL	UPPRC
+  1144  05cf  be                	CP	(HL)
+  1145  05d0  280c              	JR	Z,OSCLI2
+  1146  05d2  da4a06            	JP	C,HUH   ;END　OF　OS Command Table
+  1147  05d5  cb7e              OSCLI1:	BIT	7,(HL)  ;　
+  1148  05d7  23                	INC	HL
+  1149  05d8  28fb              	JR	Z,OSCLI1
+  1150  05da  23                	INC	HL
+  1151  05db  23                	INC	HL
+  1152  05dc  18ed              	JR	OSCLI0
+  1153                          ;
+  1154  05de  d5                OSCLI2:	PUSH	DE
+  1155  05df  13                OSCLI3:	INC	DE
+  1156  05e0  23                	INC	HL
+  1157  05e1  1a                	LD	A,(DE)
+  1158  05e2  cdc207            	CALL	UPPRC
+  1159  05e5  fe2e              	CP	'.'		;ABBREVIATED?
+  1160  05e7  280a              	JR	Z,OSCLI4
+  1161  05e9  ae                	XOR	(HL)
+  1162  05ea  28f3              	JR	Z,OSCLI3
+  1163  05ec  fe80              	CP	80H
+  1164  05ee  2803              	JR	Z,OSCLI4
+  1165  05f0  d1                	POP	DE
+  1166  05f1  18e2              	JR	OSCLI1
+  1167                          ;
+  1168  05f3  f1                OSCLI4:	POP	AF
+  1169  05f4  13                	INC	DE
+  1170  05f5  cb7e              OSCLI5:	BIT	7,(HL)
+  1171  05f7  23                	INC	HL
+  1172  05f8  28fb              	JR	Z,OSCLI5
+  1173  05fa  7e                	LD	A,(HL)
+  1174  05fb  23                	INC	HL
+  1175  05fc  66                	LD	H,(HL)
+  1176  05fd  6f                	LD	L,A
+  1177  05fe  e5                	PUSH	HL
+  1178  05ff  eb                	EX	DE,HL
+  1179  0600  c38105            	JP	SKIPSP
+  1180                          ;
+  1181                          ;
+  1182  0603  cdd804            ERA:	CALL	SETUP0		;*ERA, *ERASE
+  1183  0606  0e13              	LD	C,19
+  1184  0608  1833              	JR	XEQ		;"DELETE"
+  1185                          ;
+  1186  060a  0e0d              RES:	LD	C,13		;*RESET
+  1187  060c  182f              	JR	XEQ		;"RESET"
+  1188                          ;
+  1189  060e  cdd804            DRV:	CALL	SETUP0		;*DRIVE
+  1190  0611  3a5c00            	LD	A,(FCB)
+  1191  0614  3d                	DEC	A
+  1192  0615  fa4a06            	JP	M,HUH
+  1193  0618  5f                	LD	E,A
+  1194  0619  0e0e              	LD	C,14
+  1195  061b  1823              	JR	XEQ0
+  1196                          ;
+  1197  061d  cdd804            REN:	CALL	SETUP0		;*REN, *RENAME
+  1198  0620  fe3d              	CP	'='
+  1199  0622  2026              	JR	NZ,HUH
+  1200  0624  23                	INC	HL		;SKIP "="
+  1201  0625  e5                	PUSH	HL
+  1202  0626  cd5b06            	CALL	EXISTS
+  1203  0629  215c00            	LD	HL,FCB
+  1204  062c  116c00            	LD	DE,FCB+16
+  1205  062f  010c00            	LD	BC,12
+  1206  0632  edb0              	LDIR
+  1207  0634  e1                	POP	HL
+  1208  0635  cdd804            	CALL	SETUP0
+  1209  0638  cdfd03            	CALL	CHKAMB
+  1210  063b  0e17              	LD	C,23
+  1211  063d  115c00            XEQ:	LD	DE,FCB
+  1212  0640  7e                XEQ0:	LD	A,(HL)
+  1213  0641  fe0d              	CP	CR
+  1214  0643  2005              	JR	NZ,HUH
+  1215  0645  79                BDC:	LD	A,C
+  1216  0646  cd9103            	CALL	BDOS1
+  1217  0649  f0                	RET	P
+  1218  064a  3efe              HUH:	LD	A,254
+  1219  064c  cd0000            	CALL	EXTERR
+  1220  064f  42616420636f6d6d  	DEFM	"Bad command"
               616e64            
-  1112  05b6  00                	DEFB	0
-  1113                          ;
-  1114  05b7  218000            EXISTS:	LD	HL,DSKBUF
-  1115  05ba  cd7703            	CALL	SETDMA
-  1116  05bd  115c00            	LD	DE,FCB
-  1117  05c0  3e11              	LD	A,17
-  1118  05c2  cded02            	CALL	BDOS1		;SEARCH
-  1119  05c5  3c                	INC	A
-  1120  05c6  c8                	RET	Z
-  1121  05c7  3ec4              	LD	A,196
-  1122  05c9  cd0000            	CALL	EXTERR
-  1123  05cc  46696c6520657869  	DEFM	"File exists"
+  1221  065a  00                	DEFB	0
+  1222                          ;
+  1223  065b  218000            EXISTS:	LD	HL,DSKBUF
+  1224  065e  cd1b04            	CALL	SETDMA
+  1225  0661  115c00            	LD	DE,FCB
+  1226  0664  3e11              	LD	A,17
+  1227  0666  cd9103            	CALL	BDOS1		;SEARCH
+  1228  0669  3c                	INC	A
+  1229  066a  c8                	RET	Z
+  1230  066b  3ec4              	LD	A,196
+  1231  066d  cd0000            	CALL	EXTERR
+  1232  0670  46696c6520657869  	DEFM	"File exists"
               737473            
-  1124  05d7  00                	DEFB	0
-  1125                          ;
-  1126  05d8  cd3404            SAVLOD:	CALL	SETUP0		;PART OF *SAVE, *LOAD
-  1127  05db  cde704            	CALL	HEX
-  1128  05de  fe2b              	CP	'+'
-  1129  05e0  f5                	PUSH	AF
-  1130  05e1  d5                	PUSH	DE
-  1131  05e2  2001              	JR	NZ,SAVLO1
-  1132  05e4  23                	INC	HL
-  1133  05e5  cde704            SAVLO1:	CALL	HEX
-  1134  05e8  fe0d              	CP	CR
-  1135  05ea  20ba              	JR	NZ,HUH
-  1136  05ec  eb                	EX	DE,HL
-  1137  05ed  d1                	POP	DE
-  1138  05ee  f1                	POP	AF
-  1139  05ef  c8                	RET	Z
-  1140  05f0  b7                	OR	A
-  1141  05f1  ed52              	SBC	HL,DE
-  1142  05f3  c0                	RET	NZ
-  1143  05f4  18b0              	JR	HUH
-  1144                          ;
-  1145  05f6  23                DOT:	INC	HL
-  1146  05f7  3e3f              DIR:	LD	A,'?'		;*DIR
-  1147  05f9  cd3604            	CALL	SETUP
-  1148  05fc  f5                	PUSH	AF
-  1149  05fd  cde403            	CALL	PATHNORM
-  1150  0600  f1                	POP	AF
-  1151  0601  fe0d              	CP	CR
-  1152  0603  20a1              	JR	NZ,HUH
-  1153  0605  3a0000            	LD	A,(DOS_VER)
-  1154  0608  fe02              	CP	2
-  1155  060a  3069              	JR	NC,DIRDOS2
-  1156  060c  0e11              	LD	C,17
-  1157  060e  0604              DIR0:	LD	B,4
-  1158  0610  cdf107            DIR1:	CALL	LTRAP
-  1159  0613  115c00            	LD	DE,FCB
-  1160  0616  218000            	LD	HL,DSKBUF
-  1161  0619  cd7703            	CALL	SETDMA
-  1162  061c  79                	LD	A,C
-  1163  061d  cded02            	CALL	BDOS1		;SEARCH DIRECTORY
-  1164  0620  fa0000            	JP	M,CRLF
-  1165  0623  0f                	RRCA
-  1166  0624  0f                	RRCA
-  1167  0625  0f                	RRCA
-  1168  0626  e660              	AND	60H
-  1169  0628  5f                	LD	E,A
-  1170  0629  1600              	LD	D,0
-  1171  062b  218100            	LD	HL,DSKBUF+1
-  1172  062e  19                	ADD	HL,DE
-  1173  062f  e5                	PUSH	HL
-  1174  0630  110800            	LD	DE,8
-  1175  0633  19                	ADD	HL,DE
-  1176  0634  5e                	LD	E,(HL)
-  1177  0635  23                	INC	HL
-  1178  0636  cb7e              	BIT	7,(HL)		;SYSTEM FILE?
-  1179  0638  e1                	POP	HL
-  1180  0639  0e12              	LD	C,18
-  1181  063b  20d3              	JR	NZ,DIR1
-  1182  063d  c5                	PUSH	BC
-  1183  063e  3a5c00            	LD	A,(FCB)
-  1184  0641  3d                	DEC	A
-  1185  0642  0e19              	LD	C,25
-  1186  0644  fca105            	CALL	M,BDC
-  1187  0647  c641              	ADD	A,'A'
-  1188  0649  cd7608            	CALL	OSWRCH
-  1189  064c  0608              	LD	B,8
-  1190  064e  3e20              	LD	A,' '
-  1191  0650  cb7b              	BIT	7,E		;READ ONLY?
-  1192  0652  2802              	JR	Z,DIR3
-  1193  0654  3e2a              	LD	A,'*'
-  1194  0656  cdac07            DIR3:	CALL	CPTEXT
-  1195  0659  0603              	LD	B,3
-  1196  065b  3e20              	LD	A,' '
-  1197  065d  cdb307            	CALL	SPTEXT
-  1198  0660  c1                	POP	BC
-  1199  0661  1005              	DJNZ	DIR2
-  1200  0663  cd0000            	CALL	CRLF
-  1201  0666  18a6              	JR	DIR0
-  1202                          ;
-  1203  0668  c5                DIR2:	PUSH	BC
-  1204  0669  0605              	LD	B,5
-  1205  066b  3e20              PAD:	LD	A,' '
-  1206  066d  cd7608            	CALL	OSWRCH
-  1207  0670  10f9              	DJNZ	PAD
-  1208  0672  c1                	POP	BC
-  1209  0673  189b              	JR	DIR1
-  1210                          ;
-  1211                          ; MSX-DOS2 directory search.  FFIRST/FNEXT use IX as a 64-byte
-  1212                          ; file information block rather than a file handle.
-  1213                          ;
-  1214                          DIRDOS2:
-  1215  0675  210000            	LD	HL,PATHBUF
-  1216  0678  7e                	LD	A,(HL)
-  1217  0679  b7                	OR	A
-  1218  067a  200b              	JR	NZ,DIRD21
-  1219  067c  362a              	LD	(HL),'*'
-  1220  067e  23                	INC	HL
-  1221  067f  362e              	LD	(HL),'.'
-  1222  0681  23                	INC	HL
-  1223  0682  362a              	LD	(HL),'*'
-  1224  0684  23                	INC	HL
-  1225  0685  3600              	LD	(HL),0
-  1226                          DIRD21:
-  1227  0687  cdf107            	CALL	LTRAP
-  1228  068a  110000            	LD	DE,PATHBUF
-  1229  068d  dd210000          	LD	IX,DIRFIB
-  1230  0691  0610              	LD	B,10H		; Include directory entries.
-  1231  0693  0e40              	LD	C,40H		; FFIRST
-  1232  0695  cd0500            	CALL	BDOS
-  1233  0698  b7                	OR	A
-  1234  0699  2026              	JR	NZ,DIRD2END
-  1235  069b  0604              	LD	B,4		; Four filenames per output line.
-  1236                          DIRD22:
-  1237  069d  210100            	LD	HL,DIRFIB+1	; FIB filename field (ASCIIZ).
-  1238  06a0  cdc206            	CALL	DIRD2PUT
-  1239  06a3  1005              	DJNZ	DIRD23
-  1240  06a5  cd0000            	CALL	CRLF
-  1241  06a8  0604              	LD	B,4
-  1242                          DIRD23:
-  1243  06aa  c5                	PUSH	BC
-  1244  06ab  cdf107            	CALL	LTRAP
-  1245  06ae  dd210000          	LD	IX,DIRFIB
-  1246  06b2  0e41              	LD	C,41H		; FNEXT
-  1247  06b4  cd0500            	CALL	BDOS
-  1248  06b7  c1                	POP	BC
-  1249  06b8  b7                	OR	A
-  1250  06b9  28e2              	JR	Z,DIRD22
-  1251  06bb  78                	LD	A,B
-  1252  06bc  fe04              	CP	4
-  1253  06be  c40000            	CALL	NZ,CRLF
-  1254                          DIRD2END:
-  1255  06c1  c9                	RET
-  1256                          ;
-  1257                          ;DIRD2PUT - Print an ASCIIZ filename in a 13-character column.
-  1258                          ;   Inputs: HL = address of filename
-  1259                          ;   Destroys: A,C,H,L,F
-  1260                          ;
-  1261                          DIRD2PUT:
-  1262  06c2  0e0d              	LD	C,13
-  1263                          DIRD2P1:
-  1264  06c4  7e                	LD	A,(HL)
-  1265  06c5  b7                	OR	A
-  1266  06c6  2808              	JR	Z,DIRD2P2
-  1267  06c8  23                	INC	HL
-  1268  06c9  cd7608            	CALL	OSWRCH
-  1269  06cc  0d                	DEC	C
-  1270  06cd  20f5              	JR	NZ,DIRD2P1
-  1271  06cf  c9                	RET
-  1272                          DIRD2P2:
-  1273  06d0  3e20              	LD	A,' '
-  1274  06d2  cd7608            	CALL	OSWRCH
-  1275  06d5  0d                	DEC	C
-  1276  06d6  20f8              	JR	NZ,DIRD2P2
-  1277  06d8  c9                	RET
-  1278                          ;
-  1279  06d9  cde704            OPT:	CALL	HEX		;*OPT
-  1280  06dc  7b                	LD	A,E
-  1281  06dd  e603              	AND	3
-  1282  06df  321c09            SETOPT:	LD	(OPTVAL),A
-  1283  06e2  c9                	RET
-  1284                          ;
-  1285  06e3  af                RESET:	XOR	A
-  1286  06e4  18f9              	JR	SETOPT
-  1287                          ;
-  1288  06e6  3e01              EXEC:	LD	A,00000001B	;*EXEC
-  1289  06e8  01                	DEFB	1		;SKIP 2 BYTES (LD BC)
-  1290  06e9  3e02              SPOOL:	LD	A,00000010B	;*SPOOL
-  1291  06eb  f5                	PUSH	AF
-  1292  06ec  e5                	PUSH	HL
-  1293  06ed  cd6300            	CALL	SESHUT		;STOP SPOOL/EXEC
-  1294  06f0  e1                	POP	HL
-  1295  06f1  c1                	POP	BC
-  1296  06f2  7e                	LD	A,(HL)
-  1297  06f3  fe0d              	CP	CR		;JUST SHUT?
-  1298  06f5  c8                	RET	Z
-  1299  06f6  3a1809            	LD	A,(FLAGS)
-  1300  06f9  b0                	OR	B
-  1301  06fa  321809            	LD	(FLAGS),A	;SPOOL/EXEC FLAG
-  1302  06fd  1f                	RRA			;CARRY=1 FOR EXEC
-  1303  06fe  cdc701            	CALL	OPENIT		;OPEN SPOOL/EXEC FILE
-  1304  0701  c8                	RET	Z		;DIR FULL / NOT FOUND
-  1305  0702  dde1              	POP	IX		;RETURN ADDRESS
-  1306  0704  2a0000            	LD	HL,(HIMEM)
-  1307  0707  b7                	OR	A
-  1308  0708  ed72              	SBC	HL,SP		;SP=HIMEM?
-  1309  070a  39                	ADD	HL,SP
-  1310  070b  200f              	JR	NZ,JPIX		;ABORT
-  1311  070d  015aff            	LD	BC,-FCBSIZ
-  1312  0710  09                	ADD	HL,BC		;HL=HL-FCBSIZ
-  1313  0711  220000            	LD	(HIMEM),HL	;NEW HIMEM
-  1314  0714  220809            	LD	(TABLE),HL	;FCB/BUFFER
-  1315  0717  f9                	LD	SP,HL		;NEW SP
-  1316  0718  eb                	EX	DE,HL
-  1317  0719  cd0c02            	CALL	OPEN3		;FINISH OPEN OPERATION
-  1318  071c  dde9              JPIX:	JP	(IX)		;"RETURN"
+  1233  067b  00                	DEFB	0
+  1234                          ;
+  1235  067c  cdd804            SAVLOD:	CALL	SETUP0		;PART OF *SAVE, *LOAD
+  1236  067f  cd8b05            	CALL	HEX
+  1237  0682  fe2b              	CP	'+'
+  1238  0684  f5                	PUSH	AF
+  1239  0685  d5                	PUSH	DE
+  1240  0686  2001              	JR	NZ,SAVLO1
+  1241  0688  23                	INC	HL
+  1242  0689  cd8b05            SAVLO1:	CALL	HEX
+  1243  068c  fe0d              	CP	CR
+  1244  068e  20ba              	JR	NZ,HUH
+  1245  0690  eb                	EX	DE,HL
+  1246  0691  d1                	POP	DE
+  1247  0692  f1                	POP	AF
+  1248  0693  c8                	RET	Z
+  1249  0694  b7                	OR	A
+  1250  0695  ed52              	SBC	HL,DE
+  1251  0697  c0                	RET	NZ
+  1252  0698  18b0              	JR	HUH
+  1253                          ;
+  1254  069a  23                DOT:	INC	HL
+  1255  069b  3e3f              DIR:	LD	A,'?'		;*DIR
+  1256  069d  cdda04            	CALL	SETUP
+  1257  06a0  f5                	PUSH	AF
+  1258  06a1  cd8804            	CALL	PATHNORM
+  1259  06a4  f1                	POP	AF
+  1260  06a5  fe0d              	CP	CR
+  1261  06a7  20a1              	JR	NZ,HUH
+  1262  06a9  3a0000            	LD	A,(DOS_VER)
+  1263  06ac  fe02              	CP	2
+  1264  06ae  3069              	JR	NC,DIRDOS2
+  1265  06b0  0e11              	LD	C,17
+  1266  06b2  0604              DIR0:	LD	B,4
+  1267  06b4  cd9508            DIR1:	CALL	LTRAP
+  1268  06b7  115c00            	LD	DE,FCB
+  1269  06ba  218000            	LD	HL,DSKBUF
+  1270  06bd  cd1b04            	CALL	SETDMA
+  1271  06c0  79                	LD	A,C
+  1272  06c1  cd9103            	CALL	BDOS1		;SEARCH DIRECTORY
+  1273  06c4  fa0000            	JP	M,CRLF
+  1274  06c7  0f                	RRCA
+  1275  06c8  0f                	RRCA
+  1276  06c9  0f                	RRCA
+  1277  06ca  e660              	AND	60H
+  1278  06cc  5f                	LD	E,A
+  1279  06cd  1600              	LD	D,0
+  1280  06cf  218100            	LD	HL,DSKBUF+1
+  1281  06d2  19                	ADD	HL,DE
+  1282  06d3  e5                	PUSH	HL
+  1283  06d4  110800            	LD	DE,8
+  1284  06d7  19                	ADD	HL,DE
+  1285  06d8  5e                	LD	E,(HL)
+  1286  06d9  23                	INC	HL
+  1287  06da  cb7e              	BIT	7,(HL)		;SYSTEM FILE?
+  1288  06dc  e1                	POP	HL
+  1289  06dd  0e12              	LD	C,18
+  1290  06df  20d3              	JR	NZ,DIR1
+  1291  06e1  c5                	PUSH	BC
+  1292  06e2  3a5c00            	LD	A,(FCB)
+  1293  06e5  3d                	DEC	A
+  1294  06e6  0e19              	LD	C,25
+  1295  06e8  fc4506            	CALL	M,BDC
+  1296  06eb  c641              	ADD	A,'A'
+  1297  06ed  cd1a09            	CALL	OSWRCH
+  1298  06f0  0608              	LD	B,8
+  1299  06f2  3e20              	LD	A,' '
+  1300  06f4  cb7b              	BIT	7,E		;READ ONLY?
+  1301  06f6  2802              	JR	Z,DIR3
+  1302  06f8  3e2a              	LD	A,'*'
+  1303  06fa  cd5008            DIR3:	CALL	CPTEXT
+  1304  06fd  0603              	LD	B,3
+  1305  06ff  3e20              	LD	A,' '
+  1306  0701  cd5708            	CALL	SPTEXT
+  1307  0704  c1                	POP	BC
+  1308  0705  1005              	DJNZ	DIR2
+  1309  0707  cd0000            	CALL	CRLF
+  1310  070a  18a6              	JR	DIR0
+  1311                          ;
+  1312  070c  c5                DIR2:	PUSH	BC
+  1313  070d  0605              	LD	B,5
+  1314  070f  3e20              PAD:	LD	A,' '
+  1315  0711  cd1a09            	CALL	OSWRCH
+  1316  0714  10f9              	DJNZ	PAD
+  1317  0716  c1                	POP	BC
+  1318  0717  189b              	JR	DIR1
   1319                          ;
-  1320  071e  e67f              UPPRC:	AND	7FH
-  1321  0720  fe60              	CP	'`'
-  1322  0722  d8                	RET	C
-  1323  0723  e65f              	AND	5FH		;CONVERT TO UPPER CASE
-  1324  0725  c9                	RET
-  1325                          ;
-  1326  0726  0620              HELP:	LD	B,32
-  1327  0728  210000            	LD	HL,VERMSG
-  1328  072b  c3b607            	JP	PTEXT
-  1329                          ;
-  1330                          ;*ESC COMMAND
-  1331                          ;
-  1332  072e  7e                ESCCTL:	LD	A,(HL)
-  1333  072f  cd1e07            	CALL	UPPRC		;**
-  1334  0732  fe4f              	CP	'O'
-  1335  0734  2001              	JR	NZ,ESCC1
-  1336  0736  23                	INC	HL
-  1337  0737  cde704            ESCC1:	CALL	HEX
-  1338  073a  7b                	LD	A,E
-  1339  073b  b7                	OR	A
-  1340  073c  211809            	LD	HL,FLAGS
-  1341  073f  cbb6              	RES	6,(HL)		;ENABLE ESCAPE
-  1342  0741  c8                	RET	Z
-  1343  0742  cbf6              	SET	6,(HL)		;DISABLE ESCAPE
-  1344  0744  c9                	RET
-  1345                          ;
-  1346                          ; OSのコマンド
-  1347                          ;
-  1348  0745  4259              COMDS:	DEFM	"BY"
-  1349  0747  c5                	DEFB	'E'+80H
-  1350  0748  0000              	DEFW	BYE
-  1351  074a  4449              	DEFM	"DI"
-  1352  074c  d2                	DEFB	'R'+80H
-  1353  074d  f705              	DEFW	DIR
-  1354  074f  44524956          	DEFM	"DRIV"
-  1355  0753  c5                	DEFB	'E'+80H
-  1356  0754  6a05              	DEFW	DRV
-  1357  0756  45524153          	DEFM	"ERAS"
-  1358  075a  c5                	DEFB	'E'+80H
-  1359  075b  5f05              	DEFW	ERA
-  1360  075d  4552              	DEFM	"ER"
-  1361  075f  c1                	DEFB	'A'+80H
-  1362  0760  5f05              	DEFW	ERA
-  1363  0762  4553              	DEFM	"ES"
-  1364  0764  c3                	DEFB	'C'+80H
-  1365  0765  2e07              	DEFW	ESCCTL
-  1366  0767  455845            	DEFM	"EXE"
-  1367  076a  c3                	DEFB	'C'+80H
-  1368  076b  e606              	DEFW	EXEC
-  1369  076d  48454c            	DEFM	"HEL"
-  1370  0770  d0                	DEFB	'P'+80H
-  1371  0771  2607              	DEFW	HELP
-  1372  0773  4c4f41            	DEFM	"LOA"
-  1373  0776  c4                	DEFB	'D'+80H
-  1374  0777  af00              	DEFW	STLOAD
-  1375  0779  4f50              	DEFM	"OP"
-  1376  077b  d4                	DEFB	'T'+80H
-  1377  077c  d906              	DEFW	OPT
-  1378  077e  515549            	DEFM	"QUI"
-  1379  0781  d4                	DEFB	'T'+80H
-  1380  0782  0000              	DEFW	BYE
-  1381  0784  52454e414d        	DEFM	"RENAM"
-  1382  0789  c5                	DEFB	'E'+80H
-  1383  078a  7905              	DEFW	REN
-  1384  078c  5245              	DEFM	"RE"
-  1385  078e  ce                	DEFB	'N'+80H
-  1386  078f  7905              	DEFW	REN
-  1387  0791  52455345          	DEFM	"RESE"
-  1388  0795  d4                	DEFB	'T'+80H
-  1389  0796  6605              	DEFW	RES
-  1390  0798  534156            	DEFM	"SAV"
-  1391  079b  c5                	DEFB	'E'+80H
-  1392  079c  0000              	DEFW	STSAVE
-  1393  079e  53504f4f          	DEFM	"SPOO"
-  1394  07a2  cc                	DEFB	'L'+80H
-  1395  07a3  e906              	DEFW	SPOOL
-  1396  07a5  545950            	DEFM	"TYP"
-  1397  07a8  c5                	DEFB	'E'+80H
-  1398  07a9  9000              	DEFW	TYPE
-  1399  07ab  ff                	DEFB	0FFH
-  1400                          ;
-  1401                          ;PTEXT - Print text
-  1402                          ;   Inputs: HL = address of text
-  1403                          ;            B = number of characters to print
-  1404                          ; Destroys: A,B,H,L,F
-  1405                          ;
-  1406  07ac  f5                CPTEXT:	PUSH	AF
-  1407  07ad  3e3a              	LD	A,':'
-  1408  07af  cd7608            	CALL	OSWRCH
-  1409  07b2  f1                	POP	AF
-  1410  07b3  cd7608            SPTEXT:	CALL	OSWRCH
-  1411  07b6  7e                PTEXT:	LD	A,(HL)
-  1412  07b7  e67f              	AND	7FH
-  1413  07b9  23                	INC	HL
-  1414  07ba  cd7608            	CALL	OSWRCH
-  1415  07bd  10f7              	DJNZ	PTEXT
-  1416  07bf  c9                	RET
-  1417                          ;
-  1418                          ;OSINIT - Initialise RAM mapping etc.
-  1419                          ;If BASIC is entered by BBCBASIC FILENAME then file
-  1420                          ;FILENAME.BBC is automatically CHAINed.
-  1421                          ;   Outputs: DE = initial value of HIMEM (top of RAM)
-  1422                          ;            HL = initial value of PAGE (user program)
-  1423                          ;            Z-flag reset indicates AUTO-RUN.
-  1424                          ;  Destroys: A,B,C,D,E,H,L,F
-  1425                          ;
-  1426  07c0  0e2d              OSINIT:	LD	C,45		;*
-  1427  07c2  1efe              	LD	E,254		;*
-  1428  07c4  cd0500            	CALL	BDOS		;*
-  1429  07c7  af                	XOR	A
-  1430  07c8  0615              	LD	B,INILEN
-  1431  07ca  210809            	LD	HL,TABLE
-  1432  07cd  77                CLRTAB:	LD	(HL),A		;CLEAR FILE TABLE ETC.
-  1433  07ce  23                	INC	HL
-  1434  07cf  10fc              	DJNZ	CLRTAB
-  1435  07d1  110000            	LD	DE,ACCS
-  1436  07d4  218000            	LD	HL,DSKBUF
-  1437  07d7  4e                	LD	C,(HL)
-  1438  07d8  23                	INC	HL
-  1439  07d9  b9                	CP	C		;N.B. A=B=0
-  1440  07da  2802              	JR	Z,NOBOOT
-  1441  07dc  edb0              	LDIR			;COPY TO ACCS
-  1442  07de  eb                NOBOOT:	EX	DE,HL
-  1443  07df  360d              	LD	(HL),CR
-  1444  07e1  ed5b0600          	LD	DE,(6)		;DE = HIMEM
-  1445  07e5  5f                	LD	E,A		;PAGE BOUNDARY
-  1446  07e6  210000            	LD	HL,USER
-  1447  07e9  c9                	RET
-  1448                          ;
-  1449                          ;
-  1450                          ;TRAP - Test ESCAPE flag and abort if set;
-  1451                          ;       every 20th call, test for keypress.
-  1452                          ; Destroys: A,H,L,F
-  1453                          ;
-  1454                          ;LTRAP - Test ESCAPE flag and abort if set.
-  1455                          ; Destroys: A,F
+  1320                          ; MSX-DOS2 directory search.  FFIRST/FNEXT use IX as a 64-byte
+  1321                          ; file information block rather than a file handle.
+  1322                          ;
+  1323                          DIRDOS2:
+  1324  0719  210000            	LD	HL,PATHBUF
+  1325  071c  7e                	LD	A,(HL)
+  1326  071d  b7                	OR	A
+  1327  071e  200b              	JR	NZ,DIRD21
+  1328  0720  362a              	LD	(HL),'*'
+  1329  0722  23                	INC	HL
+  1330  0723  362e              	LD	(HL),'.'
+  1331  0725  23                	INC	HL
+  1332  0726  362a              	LD	(HL),'*'
+  1333  0728  23                	INC	HL
+  1334  0729  3600              	LD	(HL),0
+  1335                          DIRD21:
+  1336  072b  cd9508            	CALL	LTRAP
+  1337  072e  110000            	LD	DE,PATHBUF
+  1338  0731  dd210000          	LD	IX,DIRFIB
+  1339  0735  0610              	LD	B,10H		; Include directory entries.
+  1340  0737  0e40              	LD	C,40H		; FFIRST
+  1341  0739  cd0500            	CALL	BDOS
+  1342  073c  b7                	OR	A
+  1343  073d  2026              	JR	NZ,DIRD2END
+  1344  073f  0604              	LD	B,4		; Four filenames per output line.
+  1345                          DIRD22:
+  1346  0741  210100            	LD	HL,DIRFIB+1	; FIB filename field (ASCIIZ).
+  1347  0744  cd6607            	CALL	DIRD2PUT
+  1348  0747  1005              	DJNZ	DIRD23
+  1349  0749  cd0000            	CALL	CRLF
+  1350  074c  0604              	LD	B,4
+  1351                          DIRD23:
+  1352  074e  c5                	PUSH	BC
+  1353  074f  cd9508            	CALL	LTRAP
+  1354  0752  dd210000          	LD	IX,DIRFIB
+  1355  0756  0e41              	LD	C,41H		; FNEXT
+  1356  0758  cd0500            	CALL	BDOS
+  1357  075b  c1                	POP	BC
+  1358  075c  b7                	OR	A
+  1359  075d  28e2              	JR	Z,DIRD22
+  1360  075f  78                	LD	A,B
+  1361  0760  fe04              	CP	4
+  1362  0762  c40000            	CALL	NZ,CRLF
+  1363                          DIRD2END:
+  1364  0765  c9                	RET
+  1365                          ;
+  1366                          ;DIRD2PUT - Print an ASCIIZ filename in a 13-character column.
+  1367                          ;   Inputs: HL = address of filename
+  1368                          ;   Destroys: A,C,H,L,F
+  1369                          ;
+  1370                          DIRD2PUT:
+  1371  0766  0e0d              	LD	C,13
+  1372                          DIRD2P1:
+  1373  0768  7e                	LD	A,(HL)
+  1374  0769  b7                	OR	A
+  1375  076a  2808              	JR	Z,DIRD2P2
+  1376  076c  23                	INC	HL
+  1377  076d  cd1a09            	CALL	OSWRCH
+  1378  0770  0d                	DEC	C
+  1379  0771  20f5              	JR	NZ,DIRD2P1
+  1380  0773  c9                	RET
+  1381                          DIRD2P2:
+  1382  0774  3e20              	LD	A,' '
+  1383  0776  cd1a09            	CALL	OSWRCH
+  1384  0779  0d                	DEC	C
+  1385  077a  20f8              	JR	NZ,DIRD2P2
+  1386  077c  c9                	RET
+  1387                          ;
+  1388  077d  cd8b05            OPT:	CALL	HEX		;*OPT
+  1389  0780  7b                	LD	A,E
+  1390  0781  e603              	AND	3
+  1391  0783  32c009            SETOPT:	LD	(OPTVAL),A
+  1392  0786  c9                	RET
+  1393                          ;
+  1394  0787  af                RESET:	XOR	A
+  1395  0788  18f9              	JR	SETOPT
+  1396                          ;
+  1397  078a  3e01              EXEC:	LD	A,00000001B	;*EXEC
+  1398  078c  01                	DEFB	1		;SKIP 2 BYTES (LD BC)
+  1399  078d  3e02              SPOOL:	LD	A,00000010B	;*SPOOL
+  1400  078f  f5                	PUSH	AF
+  1401  0790  e5                	PUSH	HL
+  1402  0791  cd6b00            	CALL	SESHUT		;STOP SPOOL/EXEC
+  1403  0794  e1                	POP	HL
+  1404  0795  c1                	POP	BC
+  1405  0796  7e                	LD	A,(HL)
+  1406  0797  fe0d              	CP	CR		;JUST SHUT?
+  1407  0799  c8                	RET	Z
+  1408  079a  3abc09            	LD	A,(FLAGS)
+  1409  079d  b0                	OR	B
+  1410  079e  32bc09            	LD	(FLAGS),A	;SPOOL/EXEC FLAG
+  1411  07a1  1f                	RRA			;CARRY=1 FOR EXEC
+  1412  07a2  cd6b02            	CALL	OPENIT		;OPEN SPOOL/EXEC FILE
+  1413  07a5  c8                	RET	Z		;DIR FULL / NOT FOUND
+  1414  07a6  dde1              	POP	IX		;RETURN ADDRESS
+  1415  07a8  2a0000            	LD	HL,(HIMEM)
+  1416  07ab  b7                	OR	A
+  1417  07ac  ed72              	SBC	HL,SP		;SP=HIMEM?
+  1418  07ae  39                	ADD	HL,SP
+  1419  07af  200f              	JR	NZ,JPIX		;ABORT
+  1420  07b1  015aff            	LD	BC,-FCBSIZ
+  1421  07b4  09                	ADD	HL,BC		;HL=HL-FCBSIZ
+  1422  07b5  220000            	LD	(HIMEM),HL	;NEW HIMEM
+  1423  07b8  22ac09            	LD	(TABLE),HL	;FCB/BUFFER
+  1424  07bb  f9                	LD	SP,HL		;NEW SP
+  1425  07bc  eb                	EX	DE,HL
+  1426  07bd  cdb002            	CALL	OPEN3		;FINISH OPEN OPERATION
+  1427  07c0  dde9              JPIX:	JP	(IX)		;"RETURN"
+  1428                          ;
+  1429  07c2  e67f              UPPRC:	AND	7FH
+  1430  07c4  fe60              	CP	'`'
+  1431  07c6  d8                	RET	C
+  1432  07c7  e65f              	AND	5FH		;CONVERT TO UPPER CASE
+  1433  07c9  c9                	RET
+  1434                          ;
+  1435  07ca  0620              HELP:	LD	B,32
+  1436  07cc  210000            	LD	HL,VERMSG
+  1437  07cf  c35a08            	JP	PTEXT
+  1438                          ;
+  1439                          ;*ESC COMMAND
+  1440                          ;
+  1441  07d2  7e                ESCCTL:	LD	A,(HL)
+  1442  07d3  cdc207            	CALL	UPPRC		;**
+  1443  07d6  fe4f              	CP	'O'
+  1444  07d8  2001              	JR	NZ,ESCC1
+  1445  07da  23                	INC	HL
+  1446  07db  cd8b05            ESCC1:	CALL	HEX
+  1447  07de  7b                	LD	A,E
+  1448  07df  b7                	OR	A
+  1449  07e0  21bc09            	LD	HL,FLAGS
+  1450  07e3  cbb6              	RES	6,(HL)		;ENABLE ESCAPE
+  1451  07e5  c8                	RET	Z
+  1452  07e6  cbf6              	SET	6,(HL)		;DISABLE ESCAPE
+  1453  07e8  c9                	RET
+  1454                          ;
+  1455                          ; OSのコマンド
   1456                          ;
-  1457  07ea  210709            TRAP:	LD	HL,TRPCNT
-  1458  07ed  35                	DEC	(HL)
-  1459  07ee  ccfe07            	CALL	Z,TEST20	;TEST KEYBOARD
-  1460  07f1  3a1809            LTRAP:	LD	A,(FLAGS)	;ESCAPE FLAG
-  1461  07f4  b7                	OR	A		;TEST
-  1462  07f5  f0                	RET	P
-  1463  07f6  211809            ABORT:	LD	HL,FLAGS	;ACKNOWLEDGE
-  1464  07f9  cbbe              	RES	7,(HL)		;ESCAPE
-  1465  07fb  c30000            	JP	ESCAPE		;AND ABORT
-  1466                          ;
-  1467                          ;TEST - Sample for ESCape and CTRL/S. If ESCape
-  1468                          ;       pressed set ESCAPE flag and return.
-  1469                          ; Destroys: A,F
-  1470                          ;
-  1471  07fe  3614              TEST20:	LD	(HL),20
-  1472  0800  d5                TEST:	PUSH	DE
-  1473  0801  3e06              	LD	A,6
-  1474  0803  1eff              	LD	E,0FFH
-  1475  0805  cd0403            	CALL	BDOS0
-  1476  0808  d1                	POP	DE
-  1477  0809  b7                	OR	A
-  1478  080a  c8                	RET	Z
-  1479  080b  fe13              	CP	'S' & 1FH	;PAUSE DISPLAY?
-  1480  080d  281e              	JR	Z,OSRDCH
-  1481  080f  fe1b              	CP	ESC
-  1482  0811  2857              	JR	Z,ESCSET
-  1483  0813  321909            	LD	(INKEY),A
-  1484  0816  c9                	RET
-  1485                          ;
-  1486                          ;OSRDCH - Read from the current input stream (keyboard).
-  1487                          ;  Outputs: A = character
-  1488                          ; Destroys: A,F
-  1489                          ;
-  1490  0817  dd46f4            KEYGET:	LD	B,(IX-12)	;SCREEN WIDTH
-  1491  081a  cd2d08            	CALL	OSRDCH
-  1492  081d  fe7f              	CP	DEL
-  1493  081f  2809              	JR	Z,KEYDEL
-  1494  0821  fee0              	CP	224
-  1495  0823  c0                	RET	NZ
-  1496  0824  cd2d08            	CALL	OSRDCH
-  1497  0827  d641              	SUB	65
-  1498  0829  c9                	RET
-  1499                          ;
-  1500  082a  3e08              KEYDEL:	LD	A,BS
-  1501  082c  c9                	RET
-  1502                          ;
-  1503  082d  3a1809            OSRDCH:	LD	A,(FLAGS)
-  1504  0830  1f                	RRA			;*EXEC ACTIVE?
-  1505  0831  380a              	JR	C,EXECIN
-  1506  0833  e5                	PUSH	HL
-  1507  0834  ed62              	SBC	HL,HL		;HL=0
-  1508  0836  cd5508            	CALL	OSKEY
-  1509  0839  e1                	POP	HL
-  1510  083a  d8                	RET	C
-  1511  083b  18f0              	JR	OSRDCH
-  1512                          ;
-  1513                          ;EXECIN - Read byte from EXEC file
-  1514                          ;  Outputs: A = byte read
-  1515                          ; Destroys: A,F
-  1516                          ;
-  1517  083d  c5                EXECIN:	PUSH	BC		;SAVE REGISTERS
-  1518  083e  d5                	PUSH	DE
-  1519  083f  e5                	PUSH	HL
-  1520  0840  1e08              	LD	E,8		;SPOOL/EXEC CHANNEL
-  1521  0842  211809            	LD	HL,FLAGS
-  1522  0845  cb86              	RES	0,(HL)
-  1523  0847  cd3f02            	CALL	OSBGET
-  1524  084a  cbc6              	SET	0,(HL)
-  1525  084c  f5                	PUSH	AF
-  1526  084d  dc6300            	CALL	C,SESHUT	;END EXEC IF EOF
-  1527  0850  f1                	POP	AF
-  1528  0851  e1                	POP	HL		;RESTORE REGISTERS
-  1529  0852  d1                	POP	DE
-  1530  0853  c1                	POP	BC
-  1531  0854  c9                	RET
-  1532                          ;
-  1533                          ;
-  1534                          ;OSKEY - Read key with time-limit, test for ESCape.
-  1535                          ;Main function is carried out in user patch.
-  1536                          ;   Inputs: HL = time limit (centiseconds)
-  1537                          ;  Outputs: Carry reset if time-out
-  1538                          ;           If carry set A = character
-  1539                          ; Destroys: A,H,L,F
-  1540                          ;
-  1541  0855  e5                OSKEY:	PUSH	HL
-  1542  0856  211909            	LD	HL,INKEY
-  1543  0859  7e                	LD	A,(HL)
-  1544  085a  3600              	LD	(HL),0
-  1545  085c  e1                	POP	HL
-  1546  085d  b7                	OR	A
-  1547  085e  37                	SCF
-  1548  085f  c0                	RET	NZ
-  1549  0860  d5                	PUSH	DE
-  1550  0861  cd0000            	CALL	GETKEY
-  1551  0864  d1                	POP	DE
-  1552  0865  d0                	RET	NC
-  1553  0866  fe1b              	CP	ESC
-  1554  0868  37                	SCF
-  1555  0869  c0                	RET	NZ
-  1556  086a  e5                ESCSET:	PUSH	HL
-  1557  086b  211809            	LD	HL,FLAGS
-  1558  086e  cb76              	BIT	6,(HL)		;ESC DISABLED?
-  1559  0870  2002              	JR	NZ,ESCDIS
-  1560  0872  cbfe              	SET	7,(HL)		;SET ESCAPE FLAG
-  1561  0874  e1                ESCDIS:	POP	HL
-  1562  0875  c9                	RET
-  1563                          ;
-  1564                          ;OSWRCH - Write a character to console output.
-  1565                          ;   Inputs: A = character.
-  1566                          ; Destroys: Nothing
-  1567                          ;
-  1568  0876  f5                OSWRCH:	PUSH	AF
-  1569  0877  d5                	PUSH	DE
-  1570  0878  e5                	PUSH	HL
-  1571  0879  cd0000            	CALL  msxCHPUT
-  1572  087c  e1                	POP	HL
-  1573  087d  d1                	POP	DE
-  1574  087e  f1                	POP	AF
-  1575  087f  c9                	RET
-  1576                          ;
-  1577                          ;OSLINE - Read/edit a complete line, terminated by CR.
-  1578                          ;   Inputs: HL addresses destination buffer.
-  1579                          ;           (L=0)
-  1580                          ;  Outputs: Buffer filled, terminated by CR.
-  1581                          ;           A=0.
-  1582                          ; Destroys: A,B,C,D,E,H,L,F
-  1583                          ;
-  1584                          OSLINE:
-  1585                          INLINE:
-  1586  0880  eb                	EX DE,HL
-  1587  0881  d5                	PUSH DE
-  1588  0882  cd0000            	CALL msxPINLINE   ; 一行入力 入力先 BUF
-  1589  0885  d1                    POP DE
-  1590  0886  380d              	JR C,OSLINE_STOP   ; CTRL-STOPが押されたら終わり
-  1591                          INLINE0:
-  1592  0888  23                	INC HL 		; HL=BUF-1 　だから
-  1593  0889  7e                	LD A,(HL)
-  1594  088a  12                	LD (DE),A
-  1595  088b  13                	INC DE
-  1596  088c  b7                	OR A
-  1597  088d  20f9              	JR NZ,INLINE0
-  1598  088f  12                	LD (DE),A	; NULL 終端
-  1599  0890  1b                	DEC DE
-  1600  0891  3e0d              	LD A,CR
-  1601  0893  12                	LD (DE),A	; 0DH,NULL
-  1602  0894  c9                	RET
-  1603                          
-  1604                          OSLINE_STOP:
-  1605  0895  3e0d              	LD A,CR
-  1606  0897  12                	LD (DE),A	; 0DH
-  1607  0898  13                	INC DE
-  1608  0899  af                	XOR A
-  1609  089a  12                	LD (DE),A	; NULL 終端
-  1610  089b  37                	SCF			; CTRL-STOPが押されたことを示す
-  1611  089c  c9                	RET
-  1612                          ;
-  1613                          ; INIT SCREEN
-  1614                          ;
-  1615                          INITTXT:
-  1616  089d  3e50              	LD A,80
-  1617  089f  320000            	LD (WIDTH),A
-  1618  08a2  c30000            	JP msxINITXT80
-  1619                          
-  1620                          ;------------------------------------------------------------------------------
-  1621                          ; Check Msx-DOS Version (MSX1 or MSX2)
-  1622                          ; ------------------------------------------------------------------------------
-  1623                          CheckMSXDOS:
-  1624                              ; --- バージョン取得 ---
-  1625  08a5  010000                ld   bc, 0000h   ; 初期化
-  1626  08a8  0e6f                  ld   c, 6Fh      ; _DOSVER
-  1627  08aa  cd0500                call BDOS       ; BDOS
-  1628                          
-  1629  08ad  78                    ld   a, b        ; メジャーバージョン
-  1630  08ae  320000                ld   (DOS_VER), a ; 変数に格納
-  1631                          
-  1632                              ; --- 判定と表示 ---
-  1633  08b1  3a0000            	ld   a, (DOS_VER)
-  1634  08b4  fe02                  cp   2
-  1635  08b6  3006                  jr   nc, print_dos2
-  1636                          
-  1637                          print_dos1:
-  1638  08b8  21c408                LD HL, MSG_DOS1
-  1639  08bb  c30000                JP msxSTRPUT
-  1640                          
-  1641                          print_dos2:
-  1642  08be  21d008                LD HL, MSG_DOS2
-  1643  08c1  c30000                JP msxSTRPUT
-  1644                          
-  1645                          
-  1646                          ; --- データエリア ---
-  1647  08c4  4d53582d444f5320  MSG_DOS1: DEFB "MSX-DOS 1",0DH,0AH,00
+  1457  07e9  4259              COMDS:	DEFM	"BY"
+  1458  07eb  c5                	DEFB	'E'+80H
+  1459  07ec  0000              	DEFW	BYE
+  1460  07ee  4449              	DEFM	"DI"
+  1461  07f0  d2                	DEFB	'R'+80H
+  1462  07f1  9b06              	DEFW	DIR
+  1463  07f3  44524956          	DEFM	"DRIV"
+  1464  07f7  c5                	DEFB	'E'+80H
+  1465  07f8  0e06              	DEFW	DRV
+  1466  07fa  45524153          	DEFM	"ERAS"
+  1467  07fe  c5                	DEFB	'E'+80H
+  1468  07ff  0306              	DEFW	ERA
+  1469  0801  4552              	DEFM	"ER"
+  1470  0803  c1                	DEFB	'A'+80H
+  1471  0804  0306              	DEFW	ERA
+  1472  0806  4553              	DEFM	"ES"
+  1473  0808  c3                	DEFB	'C'+80H
+  1474  0809  d207              	DEFW	ESCCTL
+  1475  080b  455845            	DEFM	"EXE"
+  1476  080e  c3                	DEFB	'C'+80H
+  1477  080f  8a07              	DEFW	EXEC
+  1478  0811  48454c            	DEFM	"HEL"
+  1479  0814  d0                	DEFB	'P'+80H
+  1480  0815  ca07              	DEFW	HELP
+  1481  0817  4c4f41            	DEFM	"LOA"
+  1482  081a  c4                	DEFB	'D'+80H
+  1483  081b  b700              	DEFW	STLOAD
+  1484  081d  4f50              	DEFM	"OP"
+  1485  081f  d4                	DEFB	'T'+80H
+  1486  0820  7d07              	DEFW	OPT
+  1487  0822  515549            	DEFM	"QUI"
+  1488  0825  d4                	DEFB	'T'+80H
+  1489  0826  0000              	DEFW	BYE
+  1490  0828  52454e414d        	DEFM	"RENAM"
+  1491  082d  c5                	DEFB	'E'+80H
+  1492  082e  1d06              	DEFW	REN
+  1493  0830  5245              	DEFM	"RE"
+  1494  0832  ce                	DEFB	'N'+80H
+  1495  0833  1d06              	DEFW	REN
+  1496  0835  52455345          	DEFM	"RESE"
+  1497  0839  d4                	DEFB	'T'+80H
+  1498  083a  0a06              	DEFW	RES
+  1499  083c  534156            	DEFM	"SAV"
+  1500  083f  c5                	DEFB	'E'+80H
+  1501  0840  0000              	DEFW	STSAVE
+  1502  0842  53504f4f          	DEFM	"SPOO"
+  1503  0846  cc                	DEFB	'L'+80H
+  1504  0847  8d07              	DEFW	SPOOL
+  1505  0849  545950            	DEFM	"TYP"
+  1506  084c  c5                	DEFB	'E'+80H
+  1507  084d  9800              	DEFW	TYPE
+  1508  084f  ff                	DEFB	0FFH
+  1509                          ;
+  1510                          ;PTEXT - Print text
+  1511                          ;   Inputs: HL = address of text
+  1512                          ;            B = number of characters to print
+  1513                          ; Destroys: A,B,H,L,F
+  1514                          ;
+  1515  0850  f5                CPTEXT:	PUSH	AF
+  1516  0851  3e3a              	LD	A,':'
+  1517  0853  cd1a09            	CALL	OSWRCH
+  1518  0856  f1                	POP	AF
+  1519  0857  cd1a09            SPTEXT:	CALL	OSWRCH
+  1520  085a  7e                PTEXT:	LD	A,(HL)
+  1521  085b  e67f              	AND	7FH
+  1522  085d  23                	INC	HL
+  1523  085e  cd1a09            	CALL	OSWRCH
+  1524  0861  10f7              	DJNZ	PTEXT
+  1525  0863  c9                	RET
+  1526                          ;
+  1527                          ;OSINIT - Initialise RAM mapping etc.
+  1528                          ;If BASIC is entered by BBCBASIC FILENAME then file
+  1529                          ;FILENAME.BBC is automatically CHAINed.
+  1530                          ;   Outputs: DE = initial value of HIMEM (top of RAM)
+  1531                          ;            HL = initial value of PAGE (user program)
+  1532                          ;            Z-flag reset indicates AUTO-RUN.
+  1533                          ;  Destroys: A,B,C,D,E,H,L,F
+  1534                          ;
+  1535  0864  0e2d              OSINIT:	LD	C,45		;*
+  1536  0866  1efe              	LD	E,254		;*
+  1537  0868  cd0500            	CALL	BDOS		;*
+  1538  086b  af                	XOR	A
+  1539  086c  0615              	LD	B,INILEN
+  1540  086e  21ac09            	LD	HL,TABLE
+  1541  0871  77                CLRTAB:	LD	(HL),A		;CLEAR FILE TABLE ETC.
+  1542  0872  23                	INC	HL
+  1543  0873  10fc              	DJNZ	CLRTAB
+  1544  0875  110000            	LD	DE,ACCS
+  1545  0878  218000            	LD	HL,DSKBUF
+  1546  087b  4e                	LD	C,(HL)
+  1547  087c  23                	INC	HL
+  1548  087d  b9                	CP	C		;N.B. A=B=0
+  1549  087e  2802              	JR	Z,NOBOOT
+  1550  0880  edb0              	LDIR			;COPY TO ACCS
+  1551  0882  eb                NOBOOT:	EX	DE,HL
+  1552  0883  360d              	LD	(HL),CR
+  1553  0885  ed5b0600          	LD	DE,(6)		;DE = HIMEM
+  1554  0889  5f                	LD	E,A		;PAGE BOUNDARY
+  1555  088a  210000            	LD	HL,USER
+  1556  088d  c9                	RET
+  1557                          ;
+  1558                          ;
+  1559                          ;TRAP - Test ESCAPE flag and abort if set;
+  1560                          ;       every 20th call, test for keypress.
+  1561                          ; Destroys: A,H,L,F
+  1562                          ;
+  1563                          ;LTRAP - Test ESCAPE flag and abort if set.
+  1564                          ; Destroys: A,F
+  1565                          ;
+  1566  088e  21ab09            TRAP:	LD	HL,TRPCNT
+  1567  0891  35                	DEC	(HL)
+  1568  0892  cca208            	CALL	Z,TEST20	;TEST KEYBOARD
+  1569  0895  3abc09            LTRAP:	LD	A,(FLAGS)	;ESCAPE FLAG
+  1570  0898  b7                	OR	A		;TEST
+  1571  0899  f0                	RET	P
+  1572  089a  21bc09            ABORT:	LD	HL,FLAGS	;ACKNOWLEDGE
+  1573  089d  cbbe              	RES	7,(HL)		;ESCAPE
+  1574  089f  c30000            	JP	ESCAPE		;AND ABORT
+  1575                          ;
+  1576                          ;TEST - Sample for ESCape and CTRL/S. If ESCape
+  1577                          ;       pressed set ESCAPE flag and return.
+  1578                          ; Destroys: A,F
+  1579                          ;
+  1580  08a2  3614              TEST20:	LD	(HL),20
+  1581  08a4  d5                TEST:	PUSH	DE
+  1582  08a5  3e06              	LD	A,6
+  1583  08a7  1eff              	LD	E,0FFH
+  1584  08a9  cda803            	CALL	BDOS0
+  1585  08ac  d1                	POP	DE
+  1586  08ad  b7                	OR	A
+  1587  08ae  c8                	RET	Z
+  1588  08af  fe13              	CP	'S' & 1FH	;PAUSE DISPLAY?
+  1589  08b1  281e              	JR	Z,OSRDCH
+  1590  08b3  fe1b              	CP	ESC
+  1591  08b5  2857              	JR	Z,ESCSET
+  1592  08b7  32bd09            	LD	(INKEY),A
+  1593  08ba  c9                	RET
+  1594                          ;
+  1595                          ;OSRDCH - Read from the current input stream (keyboard).
+  1596                          ;  Outputs: A = character
+  1597                          ; Destroys: A,F
+  1598                          ;
+  1599  08bb  dd46f4            KEYGET:	LD	B,(IX-12)	;SCREEN WIDTH
+  1600  08be  cdd108            	CALL	OSRDCH
+  1601  08c1  fe7f              	CP	DEL
+  1602  08c3  2809              	JR	Z,KEYDEL
+  1603  08c5  fee0              	CP	224
+  1604  08c7  c0                	RET	NZ
+  1605  08c8  cdd108            	CALL	OSRDCH
+  1606  08cb  d641              	SUB	65
+  1607  08cd  c9                	RET
+  1608                          ;
+  1609  08ce  3e08              KEYDEL:	LD	A,BS
+  1610  08d0  c9                	RET
+  1611                          ;
+  1612  08d1  3abc09            OSRDCH:	LD	A,(FLAGS)
+  1613  08d4  1f                	RRA			;*EXEC ACTIVE?
+  1614  08d5  380a              	JR	C,EXECIN
+  1615  08d7  e5                	PUSH	HL
+  1616  08d8  ed62              	SBC	HL,HL		;HL=0
+  1617  08da  cdf908            	CALL	OSKEY
+  1618  08dd  e1                	POP	HL
+  1619  08de  d8                	RET	C
+  1620  08df  18f0              	JR	OSRDCH
+  1621                          ;
+  1622                          ;EXECIN - Read byte from EXEC file
+  1623                          ;  Outputs: A = byte read
+  1624                          ; Destroys: A,F
+  1625                          ;
+  1626  08e1  c5                EXECIN:	PUSH	BC		;SAVE REGISTERS
+  1627  08e2  d5                	PUSH	DE
+  1628  08e3  e5                	PUSH	HL
+  1629  08e4  1e08              	LD	E,8		;SPOOL/EXEC CHANNEL
+  1630  08e6  21bc09            	LD	HL,FLAGS
+  1631  08e9  cb86              	RES	0,(HL)
+  1632  08eb  cde302            	CALL	OSBGET
+  1633  08ee  cbc6              	SET	0,(HL)
+  1634  08f0  f5                	PUSH	AF
+  1635  08f1  dc6b00            	CALL	C,SESHUT	;END EXEC IF EOF
+  1636  08f4  f1                	POP	AF
+  1637  08f5  e1                	POP	HL		;RESTORE REGISTERS
+  1638  08f6  d1                	POP	DE
+  1639  08f7  c1                	POP	BC
+  1640  08f8  c9                	RET
+  1641                          ;
+  1642                          ;
+  1643                          ;OSKEY - Read key with time-limit, test for ESCape.
+  1644                          ;Main function is carried out in user patch.
+  1645                          ;   Inputs: HL = time limit (centiseconds)
+  1646                          ;  Outputs: Carry reset if time-out
+  1647                          ;           If carry set A = character
+  1648                          ; Destroys: A,H,L,F
+  1649                          ;
+  1650  08f9  e5                OSKEY:	PUSH	HL
+  1651  08fa  21bd09            	LD	HL,INKEY
+  1652  08fd  7e                	LD	A,(HL)
+  1653  08fe  3600              	LD	(HL),0
+  1654  0900  e1                	POP	HL
+  1655  0901  b7                	OR	A
+  1656  0902  37                	SCF
+  1657  0903  c0                	RET	NZ
+  1658  0904  d5                	PUSH	DE
+  1659  0905  cd0000            	CALL	GETKEY
+  1660  0908  d1                	POP	DE
+  1661  0909  d0                	RET	NC
+  1662  090a  fe1b              	CP	ESC
+  1663  090c  37                	SCF
+  1664  090d  c0                	RET	NZ
+  1665  090e  e5                ESCSET:	PUSH	HL
+  1666  090f  21bc09            	LD	HL,FLAGS
+  1667  0912  cb76              	BIT	6,(HL)		;ESC DISABLED?
+  1668  0914  2002              	JR	NZ,ESCDIS
+  1669  0916  cbfe              	SET	7,(HL)		;SET ESCAPE FLAG
+  1670  0918  e1                ESCDIS:	POP	HL
+  1671  0919  c9                	RET
+  1672                          ;
+  1673                          ;OSWRCH - Write a character to console output.
+  1674                          ;   Inputs: A = character.
+  1675                          ; Destroys: Nothing
+  1676                          ;
+  1677  091a  f5                OSWRCH:	PUSH	AF
+  1678  091b  d5                	PUSH	DE
+  1679  091c  e5                	PUSH	HL
+  1680  091d  cd0000            	CALL  msxCHPUT
+  1681  0920  e1                	POP	HL
+  1682  0921  d1                	POP	DE
+  1683  0922  f1                	POP	AF
+  1684  0923  c9                	RET
+  1685                          ;
+  1686                          ;OSLINE - Read/edit a complete line, terminated by CR.
+  1687                          ;   Inputs: HL addresses destination buffer.
+  1688                          ;           (L=0)
+  1689                          ;  Outputs: Buffer filled, terminated by CR.
+  1690                          ;           A=0.
+  1691                          ; Destroys: A,B,C,D,E,H,L,F
+  1692                          ;
+  1693                          OSLINE:
+  1694                          INLINE:
+  1695  0924  eb                	EX DE,HL
+  1696  0925  d5                	PUSH DE
+  1697  0926  cd0000            	CALL msxPINLINE   ; 一行入力 入力先 BUF
+  1698  0929  d1                    POP DE
+  1699  092a  380d              	JR C,OSLINE_STOP   ; CTRL-STOPが押されたら終わり
+  1700                          INLINE0:
+  1701  092c  23                	INC HL 		; HL=BUF-1 　だから
+  1702  092d  7e                	LD A,(HL)
+  1703  092e  12                	LD (DE),A
+  1704  092f  13                	INC DE
+  1705  0930  b7                	OR A
+  1706  0931  20f9              	JR NZ,INLINE0
+  1707  0933  12                	LD (DE),A	; NULL 終端
+  1708  0934  1b                	DEC DE
+  1709  0935  3e0d              	LD A,CR
+  1710  0937  12                	LD (DE),A	; 0DH,NULL
+  1711  0938  c9                	RET
+  1712                          
+  1713                          OSLINE_STOP:
+  1714  0939  3e0d              	LD A,CR
+  1715  093b  12                	LD (DE),A	; 0DH
+  1716  093c  13                	INC DE
+  1717  093d  af                	XOR A
+  1718  093e  12                	LD (DE),A	; NULL 終端
+  1719  093f  37                	SCF			; CTRL-STOPが押されたことを示す
+  1720  0940  c9                	RET
+  1721                          ;
+  1722                          ; INIT SCREEN
+  1723                          ;
+  1724                          INITTXT:
+  1725  0941  3e50              	LD A,80
+  1726  0943  320000            	LD (WIDTH),A
+  1727  0946  c30000            	JP msxINITXT80
+  1728                          
+  1729                          ;------------------------------------------------------------------------------
+  1730                          ; Check Msx-DOS Version (MSX1 or MSX2)
+  1731                          ; ------------------------------------------------------------------------------
+  1732                          CheckMSXDOS:
+  1733                              ; --- バージョン取得 ---
+  1734  0949  010000                ld   bc, 0000h   ; 初期化
+  1735  094c  0e6f                  ld   c, 6Fh      ; _DOSVER
+  1736  094e  cd0500                call BDOS       ; BDOS
+  1737                          
+  1738  0951  78                    ld   a, b        ; メジャーバージョン
+  1739  0952  320000                ld   (DOS_VER), a ; 変数に格納
+  1740                          
+  1741                              ; --- 判定と表示 ---
+  1742  0955  3a0000            	ld   a, (DOS_VER)
+  1743  0958  fe02                  cp   2
+  1744  095a  3006                  jr   nc, print_dos2
+  1745                          
+  1746                          print_dos1:
+  1747  095c  216809                LD HL, MSG_DOS1
+  1748  095f  c30000                JP msxSTRPUT
+  1749                          
+  1750                          print_dos2:
+  1751  0962  217409                LD HL, MSG_DOS2
+  1752  0965  c30000                JP msxSTRPUT
+  1753                          
+  1754                          
+  1755                          ; --- データエリア ---
+  1756  0968  4d53582d444f5320  MSG_DOS1: DEFB "MSX-DOS 1",0DH,0AH,00
               310d0a00          
-  1648  08d0  4d53582d444f5320  MSG_DOS2: DEFB "MSX-DOS 2",0DH,0AH,00
+  1757  0974  4d53582d444f5320  MSG_DOS2: DEFB "MSX-DOS 2",0DH,0AH,00
               320d0a00          
-  1649                          
-  1650                          ; ======================================================
-  1651                          ; HLレジスタの内容をASCII 4文字で画面に表示する
-  1652                          ; ======================================================
-  1653                          PrintAddress:
-  1654  08dc  7c                    ld  a, h
-  1655  08dd  cde108                call PrintHexByte   ; 上位バイト(H)を表示
-  1656  08e0  7d                    ld  a, l            ; 下位バイト(L)を表示
-  1657                              ; そのまま下の PrintHexByte へ流れる (Fall-through)
-  1658                          
-  1659                          ; --- 1バイト(A)を16進ASCII 2文字で表示 ---
-  1660                          PrintHexByte:
-  1661  08e1  f5                    push af             ; 下位ニブル保存用
-  1662  08e2  0f                    rrca
-  1663  08e3  0f                	rrca 		        ; 上位4ビットを下位へ移動
-  1664  08e4  0f                    rrca
-  1665  08e5  0f                	rrca
-  1666  08e6  cdea08                call PrintNibble    ; 上位桁を表示
-  1667  08e9  f1                    pop  af             ; 下位ニブルを戻す
-  1668                              ; そのまま下の PrintNibble へ流れる
-  1669                          
-  1670                          ; --- 下位4ビット(A)をASCII 1文字で表示 (DAAマジック) ---
-  1671                          PrintNibble:
-  1672  08ea  e60f                  and  0Fh            ; 下位4ビットのみにマスク
-  1673  08ec  c690                  add  a, 90h         ; 10進補正を利用するためのオフセット
-  1674  08ee  27                    daa                 ; 0-9はそのまま、A-Fは桁上げが発生
-  1675  08ef  ce40                  adc  a, 40h         ; ASCII '0'(30h)や'A'(41h)への調整
-  1676  08f1  27                    daa                 ; 最終的なASCIIコードに確定
-  1677                          
-  1678                          ; --- [システム依存] 1文字出力ルーチン ---
-  1679                              ; Aレジスタの文字を表示します。
-  1680                              ; お使いの環境に合わせて書き換えてください。
-  1681                          PUTCHAR::
-  1682  08f2  c30000            	JP msxCHPUT ; 画面に表示 (自動的にXが+1される)
-  1683                          
-  1684                          PUTCRLF:
-  1685  08f5  3e0d              	LD A,CR
-  1686  08f7  cd0000            	CALL msxCHPUT
-  1687  08fa  3e0a              	LD  A,LF
-  1688  08fc  c30000            	JP  msxCHPUT
-  1689                          
-  1690                          PROMPT:
-  1691  08ff  3e3e              	LD A,'>'
-  1692  0901  c30000            	JP msxCHPUT
-  1693                          ;
-  1694                          ; HLレジスタの指す文字列を画面に出力するルーチン
-  1695                          ; 文字列はNULL(0)で終端されているもの
-  1696                          STRPUT:
-  1697  0904  c30000                JP msxSTRPUT ; 文字列出力
-  1698                          
-  1699                          ;
-  1700                          ;
-  1701                          ;EDITST:	DEFM	"EDIT"
-  1702                          ;LISTST:	DEFM	"LIST"
-  1703                          ;
-  1704                          BEL	EQU	7
-  1705                          BS	EQU	8
-  1706                          HT	EQU	9
-  1707                          LF	EQU	0AH
-  1708                          VT	EQU	0BH
-  1709                          CR	EQU	0DH
-  1710                          ESC	EQU	1BH
-  1711                          DEL	EQU	7FH
-  1712                          ;
-  1713                          BDOS	EQU	5
-  1714                          ;
-  1715                          FCB	EQU	5CH
-  1716                          DSKBUF	EQU	80H
-  1717                          ;
-  1718                          FCBSIZ	EQU	128+36+2
-  1719                          BLOCKSIZE EQU 256
-  1720                          ;
-  1721  0907  0a                TRPCNT:	DEFB	10
-  1722  0908  0000000000000000  TABLE:	DEFS	16		;FILE BLOCK POINTERS
+  1758                          
+  1759                          ; ======================================================
+  1760                          ; HLレジスタの内容をASCII 4文字で画面に表示する
+  1761                          ; ======================================================
+  1762                          PrintAddress:
+  1763  0980  7c                    ld  a, h
+  1764  0981  cd8509                call PrintHexByte   ; 上位バイト(H)を表示
+  1765  0984  7d                    ld  a, l            ; 下位バイト(L)を表示
+  1766                              ; そのまま下の PrintHexByte へ流れる (Fall-through)
+  1767                          
+  1768                          ; --- 1バイト(A)を16進ASCII 2文字で表示 ---
+  1769                          PrintHexByte:
+  1770  0985  f5                    push af             ; 下位ニブル保存用
+  1771  0986  0f                    rrca
+  1772  0987  0f                	rrca 		        ; 上位4ビットを下位へ移動
+  1773  0988  0f                    rrca
+  1774  0989  0f                	rrca
+  1775  098a  cd8e09                call PrintNibble    ; 上位桁を表示
+  1776  098d  f1                    pop  af             ; 下位ニブルを戻す
+  1777                              ; そのまま下の PrintNibble へ流れる
+  1778                          
+  1779                          ; --- 下位4ビット(A)をASCII 1文字で表示 (DAAマジック) ---
+  1780                          PrintNibble:
+  1781  098e  e60f                  and  0Fh            ; 下位4ビットのみにマスク
+  1782  0990  c690                  add  a, 90h         ; 10進補正を利用するためのオフセット
+  1783  0992  27                    daa                 ; 0-9はそのまま、A-Fは桁上げが発生
+  1784  0993  ce40                  adc  a, 40h         ; ASCII '0'(30h)や'A'(41h)への調整
+  1785  0995  27                    daa                 ; 最終的なASCIIコードに確定
+  1786                          
+  1787                          ; --- [システム依存] 1文字出力ルーチン ---
+  1788                              ; Aレジスタの文字を表示します。
+  1789                              ; お使いの環境に合わせて書き換えてください。
+  1790                          PUTCHAR::
+  1791  0996  c30000            	JP msxCHPUT ; 画面に表示 (自動的にXが+1される)
+  1792                          
+  1793                          PUTCRLF:
+  1794  0999  3e0d              	LD A,CR
+  1795  099b  cd0000            	CALL msxCHPUT
+  1796  099e  3e0a              	LD  A,LF
+  1797  09a0  c30000            	JP  msxCHPUT
+  1798                          
+  1799                          PROMPT:
+  1800  09a3  3e3e              	LD A,'>'
+  1801  09a5  c30000            	JP msxCHPUT
+  1802                          ;
+  1803                          ; HLレジスタの指す文字列を画面に出力するルーチン
+  1804                          ; 文字列はNULL(0)で終端されているもの
+  1805                          STRPUT:
+  1806  09a8  c30000                JP msxSTRPUT ; 文字列出力
+  1807                          
+  1808                          ;
+  1809                          ;
+  1810                          ;EDITST:	DEFM	"EDIT"
+  1811                          ;LISTST:	DEFM	"LIST"
+  1812                          ;
+  1813                          BEL	EQU	7
+  1814                          BS	EQU	8
+  1815                          HT	EQU	9
+  1816                          LF	EQU	0AH
+  1817                          VT	EQU	0BH
+  1818                          CR	EQU	0DH
+  1819                          ESC	EQU	1BH
+  1820                          DEL	EQU	7FH
+  1821                          ;
+  1822                          FCB	EQU	5CH
+  1823                          DSKBUF	EQU	80H
+  1824                          ;
+  1825                          FCBSIZ	EQU	128+36+2
+  1826                          BLOCKSIZE EQU 256
+  1827                          ;
+  1828  09ab  0a                TRPCNT:	DEFB	10
+  1829  09ac  0000000000000000  TABLE:	DEFS	16		;FILE BLOCK POINTERS
               0000000000000000  
-  1723  0918  00                FLAGS:	DEFB	0
-  1724  0919  00                INKEY:	DEFB	0
-  1725  091a  0000              EDPTR:	DEFW	0
-  1726  091c  00                OPTVAL:	DEFB	0
-  1727                          INILEN	EQU	$-TABLE
-  1728                          ;
-  1729                          FIN:	;END
-  1730                          
+  1830  09bc  00                FLAGS:	DEFB	0
+  1831  09bd  00                INKEY:	DEFB	0
+  1832  09be  0000              EDPTR:	DEFW	0
+  1833  09c0  00                OPTVAL:	DEFB	0
+  1834                          INILEN	EQU	$-TABLE
+  1835                          ;
+  1836                          FIN:	;END
+  1837                          
